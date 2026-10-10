@@ -14,4 +14,4 @@ services:
       - key: BOT_TOKEN
         value: 8916949352:AAFdxDRR6704E_Q87kREKMYE1KULHnBmJMk
       - key: SEEN_API_KEY
-        value: ""
+        value: "1ybZkQeX3znP4a2poz7ZW3VYr6Men8iT"

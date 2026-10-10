@@ -9,7 +9,7 @@ ADMINS = [8422157752]
 
 # SeenSMS API Config
 SEEN_API_URL = "https://seensms.uz/api/v1"
-DEFAULT_SEEN_API_KEY = os.getenv("SEEN_API_KEY", "")
+DEFAULT_SEEN_API_KEY = os.getenv("SEEN_API_KEY", "1ybZkQeX3znP4a2poz7ZW3VYr6Men8iT")
 
 # Web Server & Web App Config
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
