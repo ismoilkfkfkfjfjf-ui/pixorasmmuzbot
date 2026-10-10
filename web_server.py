@@ -219,8 +219,13 @@ async def api_free_order_handler(request):
         try:
             api_res = await seen_client.add(cfg["service_id"], link, cfg["quantity"])
             api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
-        except Exception:
-            api_order_id = None
+            if not api_order_id:
+                return web.json_response({"error": "SeenSMS buyurtmani qabul qilmadi"}, status=400)
+        except Exception as e:
+            err_str = str(e)
+            if "Insufficient balance" in err_str:
+                return web.json_response({"error": "SeenSMS provayderida balans yetarli emas (0 UZS). Admin hisobni to'ldirishi zarur."}, status=400)
+            return web.json_response({"error": f"SeenSMS xatosi: {err_str}"}, status=400)
 
         await db.record_free_service(user_id, service_type, link)
         order_id = await db.add_order(

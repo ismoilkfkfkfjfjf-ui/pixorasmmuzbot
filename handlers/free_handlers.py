@@ -112,8 +112,29 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
             quantity=cfg["quantity"]
         )
         api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
-    except Exception:
-        api_order_id = None
+        if not api_order_id:
+            raise Exception("Buyurtma qabul qilinmadi")
+    except Exception as e:
+        await wait_msg.delete()
+        saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+        err_str = str(e)
+        if "Insufficient balance" in err_str:
+            await message.answer(
+                "⚠️ <b>SeenSMS tizimida mablag' yetarli emas!</b>\n\n"
+                "SeenSMS (seensms.uz) hisobingiz balansi: <b>0 UZS</b>.\n\n"
+                "💡 <i>Bepul xizmatlar foydalanuvchilar uchun bepul qilingan bo'lsa ham, SeenSMS provayderi har bir buyurtma uchun minimal to'lov oladi (masalan, 30 ta reaksiya uchun 15 so'm).</i>\n\n"
+                "Iltimos, bot admini seensms.uz saytida API balansini to'ldirishi zarur.",
+                parse_mode="HTML",
+                reply_markup=get_start_inline_keyboard(user_id, saved_url)
+            )
+        else:
+            await message.answer(
+                f"⚠️ SeenSMS xatosi: <code>{err_str}</code>\n\nIltimos, keyinroq qayta urinib ko'ring.",
+                parse_mode="HTML",
+                reply_markup=get_start_inline_keyboard(user_id, saved_url)
+            )
+        await state.clear()
+        return
 
     await wait_msg.delete()
 
@@ -141,7 +162,7 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
         f"📊 Miqdor: <b>{cfg['quantity']} ta</b>\n"
         f"🔗 Havola: <code>{link}</code>\n"
         f"💰 Narxi: <b>0 so'm (BEPUL)</b>\n"
-        f"🆔 Buyurtma raqami: <code>#{order_id}</code>\n\n"
+        f"🆔 Buyurtma raqami: <code>#{order_id}</code> (SeenSMS #{api_order_id})\n\n"
         f"<i>💡 Ushbu bepul xizmatdan keyingi safar 24 soatdan so'ng yana foydalanishingiz mumkin!</i>"
     )
 
