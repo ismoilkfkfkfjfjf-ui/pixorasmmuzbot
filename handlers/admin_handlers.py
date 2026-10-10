@@ -1,11 +1,12 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from config import ADMINS
+from config import ADMINS, WEBAPP_URL
 from database import db
 from seen_api import seen_client
-from handlers.keyboards import get_admin_inline, get_main_keyboard, get_cancel_keyboard
+from handlers.keyboards import get_admin_inline, get_cancel_inline
 from handlers.states import AdminStates
+from handlers.user_handlers import edit_or_reply
 
 router = Router()
 
@@ -15,7 +16,9 @@ def is_admin(user_id: int) -> bool:
 @router.message(F.text == "⚙️ Admin Panel")
 @router.message(Command("admin"))
 @router.callback_query(F.data == "btn_admin")
-async def admin_panel_handler(event: types.Message | types.CallbackQuery):
+async def admin_panel_handler(event: types.Message | types.CallbackQuery, state: FSMContext = None):
+    if state:
+        await state.clear()
     user_id = event.from_user.id
     if not is_admin(user_id):
         if isinstance(event, types.CallbackQuery):
@@ -24,19 +27,73 @@ async def admin_panel_handler(event: types.Message | types.CallbackQuery):
             await event.answer("Kechirasiz, siz admin emassiz.")
         return
 
+    current_url = await db.get_setting("webapp_url", WEBAPP_URL)
     text = (
         "⚙️ <b>Pixora SMM — Boshqaruv Paneli:</b>\n\n"
+        f"🌐 <b>Web App URL:</b> <code>{current_url}</code>\n\n"
         "Kerakli bo'limni tanlang:"
     )
     inline_kb = get_admin_inline()
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
+
+@router.message(Command("seturl"))
+async def set_webapp_url_cmd(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        current = await db.get_setting("webapp_url", WEBAPP_URL)
+        await message.answer(
+            f"🌐 <b>Hozirgi Web App URL:</b>\n<code>{current}</code>\n\n"
+            f"O'zgartirish: <code>/seturl https://sizning-sayt.onrender.com</code>",
+            parse_mode="HTML"
+        )
+        return
+    new_url = args[1].strip()
+    if not new_url.startswith("https://"):
+        await message.answer("⚠️ Havola faqat <b>https://</b> bilan boshlanishi kerak!", parse_mode="HTML")
+        return
+    await db.set_setting("webapp_url", new_url)
+    await message.answer(
+        f"✅ <b>Web App URL yangilandi:</b>\n<code>{new_url}</code>\n\n"
+        f"Barcha Mini App tugmalari shu yangi havolaga o'tdi!",
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
+    )
+
+@router.callback_query(F.data == "admin_set_url")
+async def admin_set_url_prompt(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return
+    current = await db.get_setting("webapp_url", WEBAPP_URL)
+    await state.set_state(AdminStates.waiting_for_url)
+    text = (
+        f"🌐 <b>Web App havolasini o'rnatish:</b>\n\n"
+        f"Hozirgi havola: <code>{current}</code>\n\n"
+        f"Yangi Render havolasini yuboring (masalan: <code>https://pixorasmmuzbot.onrender.com</code>) "
+        f"yoki <code>/seturl https://...</code> buyrug'idan foydalaning:"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_cancel_inline())
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_url)
+async def admin_save_url_state(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    new_url = message.text.strip()
+    if not new_url.startswith("https://"):
+        await message.answer("⚠️ Havola faqat <b>https://</b> bilan boshlanishi kerak!", reply_markup=get_cancel_inline())
+        return
+    await db.set_setting("webapp_url", new_url)
+    await state.clear()
+    await message.answer(
+        f"✅ <b>Web App havolasi muvaffaqiyatli saqlandi!</b>\n\n"
+        f"🌐 URL: <code>{new_url}</code>",
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
+    )
 
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats_callback(callback: types.CallbackQuery):
@@ -95,7 +152,7 @@ async def admin_set_api_key_prompt(callback: types.CallbackQuery, state: FSMCont
         f"Hozirgi kalit: <code>{curr_key or 'Kiritilmagan'}</code>\n\n"
         f"Yangi API kalitni yuboring:",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 
@@ -116,12 +173,12 @@ async def admin_save_api_key(message: types.Message, state: FSMContext):
         await message.answer(
             f"✅ API kalit saqlandi va ulandi!\n"
             f"Hisob balansi: {bal_val:,} {curr_val}".replace(",", " "),
-            reply_markup=get_main_keyboard(message.from_user.id)
+            reply_markup=get_admin_inline()
         )
     except Exception as e:
         await message.answer(
             f"⚠️ API kalit saqlandi, ammo ulanishda xatolik: {str(e)}",
-            reply_markup=get_main_keyboard(message.from_user.id)
+            reply_markup=get_admin_inline()
         )
 
 @router.callback_query(F.data == "admin_set_margin")
@@ -136,7 +193,7 @@ async def admin_set_margin_prompt(callback: types.CallbackQuery, state: FSMConte
         f"Hozirgi foiz: <b>{margin}%</b>\n\n"
         f"Yangi foiz miqdorini kiriting (masalan: <code>25</code>):",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 
@@ -152,7 +209,7 @@ async def admin_save_margin(message: types.Message, state: FSMContext):
         await message.answer(
             f"✅ Ustama foizi <b>{new_margin}%</b> qilib belgilandi!",
             parse_mode="HTML",
-            reply_markup=get_main_keyboard(message.from_user.id)
+            reply_markup=get_admin_inline()
         )
     except ValueError:
         await message.answer("Iltimos, to'g'ri son kiriting (masalan: 20):")
@@ -172,7 +229,7 @@ async def admin_set_card_prompt(callback: types.CallbackQuery, state: FSMContext
         f"Yangi karta va egasini quyidagi formatda yuboring:\n"
         f"<code>8600 1234 5678 9012 - Ism Familiya</code>",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 
@@ -199,7 +256,7 @@ async def admin_save_card(message: types.Message, state: FSMContext):
         f"💳 <code>{card_num}</code>\n"
         f"👤 {holder}",
         parse_mode="HTML",
-        reply_markup=get_main_keyboard(message.from_user.id)
+        reply_markup=get_admin_inline()
     )
 
 @router.callback_query(F.data == "admin_user_balance")
@@ -212,7 +269,7 @@ async def admin_balance_user_prompt(callback: types.CallbackQuery, state: FSMCon
         "➕/➖ <b>Foydalanuvchi balansini boshqarish:</b>\n\n"
         "Foydalanuvchining Telegram ID raqamini kiriting:",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 
@@ -225,7 +282,7 @@ async def admin_balance_user_id_recv(message: types.Message, state: FSMContext):
         target_id = int(message.text.strip())
         target_user = await db.get_user(target_id)
         if not target_user:
-            await message.answer("❌ Bunday ID ga ega foydalanuvchi topilmadi. Qaytadan kiriting:")
+            await message.answer("❌ Bunday ID ga ega foydalanuvchi topilmadi. Qaytadan kiriting:", reply_markup=get_cancel_inline())
             return
 
         await state.update_data(target_id=target_id)
@@ -236,10 +293,10 @@ async def admin_balance_user_id_recv(message: types.Message, state: FSMContext):
             f"Joriy balansi: <b>{int(target_user.get('balance', 0)):,} so'm</b>\n\n"
             f"Qo'shish yoki ayirish miqdorini kiriting (masalan: <code>15000</code> yoki <code>-5000</code>):".replace(",", " "),
             parse_mode="HTML",
-            reply_markup=get_cancel_keyboard()
+            reply_markup=get_cancel_inline()
         )
     except ValueError:
-        await message.answer("Iltimos, faqat raqamli ID kiriting:")
+        await message.answer("Iltimos, faqat raqamli ID kiriting:", reply_markup=get_cancel_inline())
 
 @router.message(AdminStates.waiting_for_balance_amount)
 async def admin_balance_amount_recv(message: types.Message, state: FSMContext):
@@ -272,10 +329,10 @@ async def admin_balance_amount_recv(message: types.Message, state: FSMContext):
             f"✅ Balans muvaffaqiyatli o'zgartirildi!\n"
             f"Yangi balans: <b>{int(user['balance']):,} so'm</b>".replace(",", " "),
             parse_mode="HTML",
-            reply_markup=get_main_keyboard(message.from_user.id)
+            reply_markup=get_admin_inline()
         )
     except ValueError:
-        await message.answer("Iltimos, to'g'ri son kiriting:")
+        await message.answer("Iltimos, to'g'ri son kiriting:", reply_markup=get_cancel_inline())
 
 @router.callback_query(F.data == "admin_sync_services")
 async def admin_sync_services_callback(callback: types.CallbackQuery):
@@ -289,7 +346,8 @@ async def admin_sync_services_callback(callback: types.CallbackQuery):
     await callback.message.answer(
         f"✅ Xizmatlar bazasi muvaffaqiyatli yangilandi!\n"
         f"Jami xizmatlar: <b>{len(srvs)} ta</b>",
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
     )
     await callback.answer()
 
@@ -303,7 +361,7 @@ async def admin_broadcast_prompt(callback: types.CallbackQuery, state: FSMContex
         "✉️ <b>Barcha foydalanuvchilarga xabar tarqatish:</b>\n\n"
         "Yubormoqchi bo'lgan xabaringizni yozing (rasm, video yoki matn bo'lishi mumkin):",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 

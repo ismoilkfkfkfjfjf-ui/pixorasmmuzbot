@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Router, F, types
 from database import db
 from seen_api import seen_client, DEFAULT_NUMBER_SERVICES, DEFAULT_NUMBER_COUNTRIES
-from handlers.keyboards import get_main_keyboard
+from handlers.user_handlers import edit_or_reply
 
 router = Router()
 
@@ -25,15 +25,9 @@ async def numbers_menu_handler(event: types.Message | types.CallbackQuery):
         "Qaysi platforma uchun raqam kerak? Tanlang:"
     )
     inline_kb = types.InlineKeyboardMarkup(inline_keyboard=keyboard)
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 @router.callback_query(F.data.startswith("num_srv:"))
 async def number_service_chosen(callback: types.CallbackQuery):

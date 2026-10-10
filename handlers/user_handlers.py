@@ -30,23 +30,44 @@ def get_start_text(first_name: str) -> str:
         f"👇 <b>Quyidagi tugmalardan birini tanlang:</b>"
     )
 
-@router.message(F.text == "❌ Bekor qilish")
+async def edit_or_reply(event: types.Message | types.CallbackQuery, text: str, reply_markup=None):
+    """Xabarni joyida (in-place) yangilaydi — ortiqcha yangi matnli xabarlar beravermaydi."""
+    if isinstance(event, types.CallbackQuery):
+        msg = event.message
+        try:
+            if msg.photo:
+                if len(text) <= 1024:
+                    await msg.edit_caption(caption=text, parse_mode="HTML", reply_markup=reply_markup)
+                    return
+                else:
+                    await msg.delete()
+                    await msg.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+                    return
+            else:
+                await msg.edit_text(text, parse_mode="HTML", reply_markup=reply_markup)
+                return
+        except Exception:
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+            await msg.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+    else:
+        await event.answer(text, parse_mode="HTML", reply_markup=reply_markup)
+
+@router.message(F.text.in_({"❌ Bekor qilish", "🏠 Asosiy Menyu", "/menu"}))
 @router.callback_query(F.data == "btn_home")
 async def home_handler(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
     user_id = event.from_user.id
     first_name = event.from_user.first_name or "Foydalanuvchi"
     text = get_start_text(first_name)
-    inline_kb = get_start_inline_keyboard(user_id)
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+    inline_kb = get_start_inline_keyboard(user_id, saved_url)
 
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 @router.message(CommandStart())
 async def start_handler(message: types.Message, state: FSMContext):
@@ -85,10 +106,10 @@ async def start_handler(message: types.Message, state: FSMContext):
     logo_path = ASSETS_DIR / "pixora_logo.jpg"
     photo_to_send = banner_path if banner_path.exists() else (logo_path if logo_path.exists() else None)
 
-    # Send both inline keyboard on message and main keyboard in reply markup
-    inline_kb = get_start_inline_keyboard(user_id)
-    reply_kb = get_main_keyboard(user_id)
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+    inline_kb = get_start_inline_keyboard(user_id, saved_url)
 
+    # Faqat bitta toza xabar — ortiqcha matnli reply klaviatura jo'natilmaydi!
     if photo_to_send:
         await message.answer_photo(
             photo=types.FSInputFile(str(photo_to_send)),
@@ -96,8 +117,6 @@ async def start_handler(message: types.Message, state: FSMContext):
             parse_mode="HTML",
             reply_markup=inline_kb
         )
-        # Send reply keyboard too so both options exist
-        await message.answer("Bosh menyu tugmalari faollashtirildi 👇", reply_markup=reply_kb)
     else:
         await message.answer(
             caption,
@@ -138,15 +157,9 @@ async def profile_handler(event: types.Message | types.CallbackQuery):
     ).replace(",", " ")
 
     inline_kb = get_profile_inline(bot_info.username, user_id)
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 
 # Balance Handler
@@ -173,15 +186,9 @@ async def balance_handler(event: types.Message | types.CallbackQuery, state: FSM
     ).replace(",", " ")
 
     inline_kb = get_balance_inline()
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 
 @router.callback_query(F.data == "btn_send_receipt")
@@ -190,7 +197,7 @@ async def start_deposit_flow(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "Qancha mablag' o'tkazdingiz? (Summani faqat raqamlarda kiriting, masalan: <code>10000</code>):",
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
     await callback.answer()
 
@@ -210,7 +217,7 @@ async def deposit_amount_handler(message: types.Message, state: FSMContext):
             f"✅ Qabul qilindi: <b>{int(amount):,} so'm</b>.\n\n"
             f"Endi to'lov chekini (rasm yoki skrinshot) yuboring:".replace(",", " "),
             parse_mode="HTML",
-            reply_markup=get_cancel_keyboard()
+            reply_markup=get_cancel_inline()
         )
     except ValueError:
         await message.answer("Iltimos, to'g'ri raqam kiriting (masalan: 10000):")
@@ -226,10 +233,11 @@ async def deposit_receipt_handler(message: types.Message, state: FSMContext):
     dep_id = await db.create_deposit(user_id, amount, photo_id)
 
     await state.clear()
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
     await message.answer(
         f"✅ To'lov chekingiz qabul qilindi (Ariza #{dep_id})!\n"
         f"Administrator tekshirib chiqqach, mablag' balansingizga qo'shiladi.",
-        reply_markup=get_main_keyboard(user_id)
+        reply_markup=get_start_inline_keyboard(user_id, saved_url)
     )
 
     # Notify admins
@@ -332,7 +340,8 @@ async def downloader_process_handler(message: types.Message, state: FSMContext):
             )
     except Exception as e:
         await wait_msg.delete()
-        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}", reply_markup=get_main_keyboard(message.from_user.id))
+        saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+        await message.answer(f"❌ Xatolik yuz berdi: {str(e)}", reply_markup=get_start_inline_keyboard(message.from_user.id, saved_url))
 
     await state.clear()
 
@@ -370,15 +379,9 @@ async def user_orders_handler(event: types.Message | types.CallbackQuery):
                 )
 
     inline_kb = get_orders_inline()
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 
 # Support Handler
@@ -394,12 +397,6 @@ async def support_handler(event: types.Message | types.CallbackQuery):
         f"📢 Yangiliklar kanali: https://t.me/pixorasmm"
     )
     inline_kb = get_support_inline(support_username)
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)

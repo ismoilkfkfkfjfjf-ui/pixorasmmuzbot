@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 import sys
@@ -58,8 +59,16 @@ async def main():
     site = web.TCPSite(runner, WEB_HOST, WEB_PORT)
     await site.start()
 
+    # Auto-detect Render external URL
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if render_url:
+        await db.set_setting("webapp_url", render_url)
+        logger.info(f"🌐 Render external URL detected and saved: {render_url}")
+
+    current_webapp_url = await db.get_setting("webapp_url", WEBAPP_URL)
+
     logger.info(f"🌐 Web App Mini App server running at http://{WEB_HOST}:{WEB_PORT}")
-    logger.info(f"🚀 Bot polling started! Admin ID: {ADMINS}")
+    logger.info(f"🚀 Bot polling started! Admin ID: {ADMINS} | WebApp URL: {current_webapp_url}")
 
     try:
         # Notify admins that bot is running
@@ -72,9 +81,10 @@ async def main():
                     admin_id,
                     f"🚀 <b>Pixora SMM Bot ishga tushdi!</b>\n\n"
                     f"🤖 Bot: @{bot_info.username}\n"
-                    f"🌐 Web App: <code>http://localhost:{WEB_PORT}</code>\n"
-                    f"👑 Siz botsizning bosh administratorisiz!\n"
-                    f"Boshqaruv paneli: /admin",
+                    f"🌐 Web App: <code>{current_webapp_url}</code>\n"
+                    f"👑 Siz botsizning bosh administratorisiz!\n\n"
+                    f"Boshqaruv paneli: /admin\n"
+                    f"Web App URL sozlash: /seturl &lt;url&gt;",
                     parse_mode="HTML"
                 )
             except Exception as e:

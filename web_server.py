@@ -244,12 +244,36 @@ async def api_user_orders_handler(request):
     return web.json_response(orders)
 
 
-def create_web_app():
-    app = web.Application()
+@web.middleware
+async def cors_and_headers_middleware(request, handler):
+    if request.method == "OPTIONS":
+        response = web.Response(status=204)
+    else:
+        try:
+            response = await handler(request)
+        except web.HTTPException as ex:
+            response = ex
 
-    # Routes
-    app.router.add_get("/", index_handler)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    if "X-Frame-Options" in response.headers:
+        del response.headers["X-Frame-Options"]
+    response.headers["Content-Security-Policy"] = "frame-ancestors *;"
+    return response
+
+
+def create_web_app():
+    app = web.Application(middlewares=[cors_and_headers_middleware])
+
+    # Routes for WebApp HTML
+    for p in ["/", "/index.html", "/webapp", "/webapp/", "/webapp/index.html"]:
+        app.router.add_get(p, index_handler)
+
+    # Health check for Render uptime monitoring
     app.router.add_get("/health", health_handler)
+
+    # REST APIs
     app.router.add_get("/api/user", api_user_handler)
     app.router.add_get("/api/services", api_services_handler)
     app.router.add_post("/api/order", api_order_handler)
@@ -261,9 +285,7 @@ def create_web_app():
     app.router.add_get("/api/free/services", api_free_services_handler)
     app.router.add_post("/api/free/order", api_free_order_handler)
 
-    # Static assets
+    # Static assets (style.css, app.js, images from webapp/)
     app.router.add_static("/static", path=str(BASE_DIR / "webapp"), name="webapp_static")
-    if ASSETS_DIR.exists():
-        app.router.add_static("/static", path=str(ASSETS_DIR), name="assets_static")
 
     return app

@@ -1,10 +1,12 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from config import WEBAPP_URL
 from database import db
 from seen_api import seen_client
-from handlers.keyboards import get_free_services_inline, get_main_keyboard, get_cancel_keyboard
+from handlers.keyboards import get_free_services_inline, get_start_inline_keyboard, get_cancel_inline
 from handlers.states import FreeOrderStates
+from handlers.user_handlers import edit_or_reply
 
 router = Router()
 
@@ -51,15 +53,9 @@ async def free_services_menu(event: types.Message | types.CallbackQuery, state: 
         "Kerakli bepul xizmatni tanlang:"
     )
     inline_kb = get_free_services_inline()
-
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 @router.callback_query(F.data.startswith("free_act:"))
 async def free_service_chosen(callback: types.CallbackQuery, state: FSMContext):
@@ -88,14 +84,17 @@ async def free_service_chosen(callback: types.CallbackQuery, state: FSMContext):
         f"📝 <b>Ko'rsatma:</b> {cfg['desc']}\n\n"
         f"🔗 <b>{cfg['prompt']}</b>"
     )
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=get_cancel_keyboard())
+    await edit_or_reply(callback, text, get_cancel_inline())
     await callback.answer()
 
 @router.message(FreeOrderStates.waiting_for_link)
 async def free_order_link_received(message: types.Message, state: FSMContext):
     link = message.text.strip()
     if not link.startswith("http") and not link.startswith("@") and "t.me" not in link and "instagram.com" not in link:
-        await message.answer("Iltimos, to'g'ri havola yuboring (masalan: https://t.me/kanal yoki https://instagram.com/reel/...):")
+        await message.answer(
+            "Iltimos, to'g'ri havola yuboring (masalan: https://t.me/kanal yoki https://instagram.com/reel/...):",
+            reply_markup=get_cancel_inline()
+        )
         return
 
     data = await state.get_data()
@@ -103,7 +102,7 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
     cfg = data["cfg"]
     user_id = message.from_user.id
 
-    wait_msg = await message.answer("⏳ Bepul buyurtma SeenSMS orqali yuborilmoqda, iltimos kuting...")
+    wait_msg = await message.answer("⏳ Bepul buyurtma SeenSMS orqali yuborilmoqda...")
 
     try:
         # Call SeenSMS API
@@ -113,9 +112,8 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
             quantity=cfg["quantity"]
         )
         api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
-    except Exception as e:
+    except Exception:
         api_order_id = None
-        # Still record in order so demo simulation doesn't fail if SeenSMS has temp maintenance
 
     await wait_msg.delete()
 
@@ -136,6 +134,7 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
 
     await state.clear()
 
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
     celebration_text = (
         f"🎉 <b>Tabriklaymiz! Bepul buyurtmangiz ishga tushirildi!</b>\n\n"
         f"📌 Xizmat: <b>{cfg['name']}</b>\n"
@@ -146,4 +145,4 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
         f"<i>💡 Ushbu bepul xizmatdan keyingi safar 24 soatdan so'ng yana foydalanishingiz mumkin!</i>"
     )
 
-    await message.answer(celebration_text, parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+    await message.answer(celebration_text, parse_mode="HTML", reply_markup=get_start_inline_keyboard(user_id, saved_url))

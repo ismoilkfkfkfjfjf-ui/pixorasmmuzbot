@@ -1,8 +1,9 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from config import ADMINS, WEBAPP_URL
 
-def get_start_inline_keyboard(user_id: int) -> InlineKeyboardMarkup:
+def get_start_inline_keyboard(user_id: int, webapp_url: str = None) -> InlineKeyboardMarkup:
     """Xabar tagidagi asosiy Inline menyu tugmalari."""
+    target_url = webapp_url or WEBAPP_URL
     buttons = [
         [
             InlineKeyboardButton(text="🎁 Bepul Xizmatlar", callback_data="btn_free"),
@@ -21,7 +22,7 @@ def get_start_inline_keyboard(user_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🛍️ Xizmatlar Do'koni", callback_data="open_shop")
         ],
         [
-            InlineKeyboardButton(text="📱 Mini App (Do'kon)", web_app=WebAppInfo(url=WEBAPP_URL)),
+            InlineKeyboardButton(text="📱 Mini App (Do'kon)", web_app=WebAppInfo(url=target_url)),
             InlineKeyboardButton(text="💬 Qo'llab-quvvatlash", callback_data="btn_support")
         ]
     ]
@@ -176,10 +177,11 @@ def get_admin_inline() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="➕/➖ Foydalanuvchi Balansi", callback_data="admin_user_balance")
         ],
         [
-            InlineKeyboardButton(text="✉️ Xabar Tarqatish", callback_data="admin_broadcast"),
+            InlineKeyboardButton(text="🌐 Web App URL sozlash", callback_data="admin_set_url"),
             InlineKeyboardButton(text="🔄 Xizmatlarni Yangilash", callback_data="admin_sync_services")
         ],
         [
+            InlineKeyboardButton(text="✉️ Xabar Tarqatish", callback_data="admin_broadcast"),
             InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")
         ]
     ])

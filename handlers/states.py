@@ -22,3 +22,4 @@ class AdminStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_balance_amount = State()
     waiting_for_broadcast_msg = State()
+    waiting_for_url = State()

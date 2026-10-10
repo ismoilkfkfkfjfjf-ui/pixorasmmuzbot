@@ -3,8 +3,9 @@ from aiogram.fsm.context import FSMContext
 from config import WEBAPP_URL
 from database import db
 from seen_api import seen_client
-from handlers.keyboards import get_categories_inline, get_services_inline, get_main_keyboard, get_cancel_keyboard
+from handlers.keyboards import get_categories_inline, get_services_inline, get_start_inline_keyboard, get_cancel_inline
 from handlers.states import OrderStates
+from handlers.user_handlers import edit_or_reply
 
 router = Router()
 
@@ -16,14 +17,9 @@ async def smm_menu_handler(event: types.Message | types.CallbackQuery):
         "Ijtimoiy tarmoqni tanlang:"
     )
     inline_kb = get_categories_inline()
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 @router.callback_query(F.data == "back_categories")
 async def back_to_categories(callback: types.CallbackQuery):
@@ -48,14 +44,9 @@ async def open_all_services_in_bot(event: types.Message | types.CallbackQuery):
         "Xarid qilmoqchi bo'lgan xizmatingizni tanlang:"
     )
     inline_kb = get_services_inline(services[:10], margin, "Barchasi")
+    await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, parse_mode="HTML", reply_markup=inline_kb)
-        except Exception:
-            await event.message.answer(text, parse_mode="HTML", reply_markup=inline_kb)
         await event.answer()
-    else:
-        await event.answer(text, parse_mode="HTML", reply_markup=inline_kb)
 
 @router.callback_query(F.data.startswith("cat:"))
 async def category_selected_handler(callback: types.CallbackQuery):
@@ -128,7 +119,7 @@ async def order_link_handler(message: types.Message, state: FSMContext):
         f"Endi buyurtma miqdorini kiriting:\n"
         f"<i>(Minimal: {data['min_q']:,} ta, Maksimal: {data['max_q']:,} ta)</i>".replace(",", " "),
         parse_mode="HTML",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_cancel_inline()
     )
 
 @router.message(OrderStates.waiting_for_quantity)
@@ -139,7 +130,8 @@ async def order_quantity_handler(message: types.Message, state: FSMContext):
 
         if qty < data["min_q"] or qty > data["max_q"]:
             await message.answer(
-                f"Miqdor {data['min_q']:,} va {data['max_q']:,} oralig'ida bo'lishi kerak!".replace(",", " ")
+                f"Miqdor {data['min_q']:,} va {data['max_q']:,} oralig'ida bo'lishi kerak!".replace(",", " "),
+                reply_markup=get_cancel_inline()
             )
             return
 
@@ -206,6 +198,7 @@ async def execute_smm_order(callback: types.CallbackQuery, state: FSMContext):
     )
 
     await state.clear()
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
     await callback.message.edit_text(
         f"🎉 <b>Buyurtmangiz muvaffaqiyatli qabul qilindi!</b>\n\n"
         f"🆔 Buyurtma raqami: <code>#{order_id}</code>\n"
@@ -214,14 +207,17 @@ async def execute_smm_order(callback: types.CallbackQuery, state: FSMContext):
         f"💰 Yechildi: {total_price:,} so'm\n"
         f"⏳ Holati: Ishga tushirildi (Avtomatik)\n\n"
         f"Rahmat, xizmatimizdan foydalanganingiz uchun!".replace(",", " "),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=get_start_inline_keyboard(user_id, saved_url)
     )
-    await callback.message.answer("Asosiy menyu:", reply_markup=get_main_keyboard(user_id))
     await callback.answer()
 
 @router.callback_query(OrderStates.confirm_order, F.data == "cancel_smm_order")
 async def cancel_smm_order_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("Buyurtma bekor qilindi.")
-    await callback.message.answer("Asosiy menyu:", reply_markup=get_main_keyboard(callback.from_user.id))
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+    await callback.message.edit_text(
+        "Buyurtma bekor qilindi.",
+        reply_markup=get_start_inline_keyboard(callback.from_user.id, saved_url)
+    )
     await callback.answer()
