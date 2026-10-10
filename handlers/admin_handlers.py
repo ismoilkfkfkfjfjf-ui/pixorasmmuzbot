@@ -64,18 +64,20 @@ async def admin_seen_balance_callback(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
 
-    b = await seen_client.get_balance()
-    if b.get("connected"):
+    try:
+        b = await seen_client.balance()
+        bal_val = b.get("balance", 0)
+        curr_val = b.get("currency", "UZS")
         text = (
             f"💰 <b>SeenSMS API Balansi:</b>\n\n"
-            f"💵 Balans: <b>{b['balance']:,} {b['currency']}</b>\n"
+            f"💵 Balans: <b>{bal_val:,} {curr_val}</b>\n"
             f"🟢 Holati: Ulangan va faol!"
         ).replace(",", " ")
-    else:
+    except Exception as e:
         text = (
-            "⚠️ <b>SeenSMS API Kaliti ulanmagan yoki xato!</b>\n\n"
-            f"Xatolik: {b.get('error', 'API kalit topilmadi')}\n\n"
-            "Pastdagi <b>🔑 Seen API Kalit</b> tugmasi orqali API kalitni kiriting."
+            "⚠️ <b>SeenSMS API Balansini olishda xatolik:</b>\n\n"
+            f"Xatolik: <code>{str(e)}</code>\n\n"
+            "Pastdagi <b>🔑 Seen API Kalit</b> tugmasi orqali API kalitni tekshiring."
         )
 
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_inline())
@@ -107,16 +109,18 @@ async def admin_save_api_key(message: types.Message, state: FSMContext):
     await state.clear()
 
     # Test key
-    bal = await seen_client.get_balance()
-    if bal.get("connected"):
+    try:
+        bal = await seen_client.balance()
+        bal_val = bal.get("balance", 0)
+        curr_val = bal.get("currency", "UZS")
         await message.answer(
             f"✅ API kalit saqlandi va ulandi!\n"
-            f"Hisob balansi: {bal['balance']:,} {bal['currency']}".replace(",", " "),
+            f"Hisob balansi: {bal_val:,} {curr_val}".replace(",", " "),
             reply_markup=get_main_keyboard(message.from_user.id)
         )
-    else:
+    except Exception as e:
         await message.answer(
-            f"⚠️ API kalit saqlandi, ammo tekshirishda xatolik: {bal.get('error')}",
+            f"⚠️ API kalit saqlandi, ammo ulanishda xatolik: {str(e)}",
             reply_markup=get_main_keyboard(message.from_user.id)
         )
 

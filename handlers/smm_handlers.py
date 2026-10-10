@@ -183,8 +183,12 @@ async def execute_smm_order(callback: types.CallbackQuery, state: FSMContext):
         return
 
     # Call SeenSMS API
-    api_res = await seen_client.add_order(data["service_id"], data["link"], data["quantity"])
-    api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+    try:
+        api_res = await seen_client.add(data["service_id"], data["link"], data["quantity"])
+        api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+    except Exception as e:
+        await callback.answer(f"API xatosi: {str(e)}", show_alert=True)
+        return
 
     # Deduct balance
     await db.update_balance(user_id, -total_price)

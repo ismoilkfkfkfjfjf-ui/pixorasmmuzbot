@@ -77,7 +77,7 @@ async def api_order_handler(request):
             return web.json_response({"error": "Mablag' yetarli emas"}, status=400)
 
         # Send to API
-        api_res = await seen_client.add_order(service_id, link, quantity)
+        api_res = await seen_client.add(service_id, link, quantity)
         api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
 
         # Deduct balance
@@ -105,12 +105,12 @@ async def api_order_handler(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def api_numbers_services_handler(request):
-    services = await seen_client.get_numbers_services()
+    services = await seen_client.numbers_services()
     return web.json_response(services)
 
 async def api_numbers_countries_handler(request):
     service_code = request.query.get("service", "tg")
-    countries = await seen_client.get_numbers_countries(service_code)
+    countries = await seen_client.numbers_countries(service_code)
     return web.json_response(countries)
 
 async def api_numbers_buy_handler(request):
@@ -125,12 +125,12 @@ async def api_numbers_buy_handler(request):
         if not user or user["balance"] < price:
             return web.json_response({"error": "Mablag' yetarli emas"}, status=400)
 
-        res = await seen_client.buy_number(country_code, service_code)
-        if not isinstance(res, dict) or ("phone" not in res and "id" not in res):
-            return web.json_response({"error": res.get("error", "Raqam olishda xatolik")}, status=400)
+        res = await seen_client.numbers_get(country_code, service_code)
+        phone = res.get("number") or res.get("phone")
+        order_id = res.get("id")
 
-        phone = res.get("phone", "+998901234567")
-        order_id = res.get("id", 1001)
+        if not phone or not order_id:
+            return web.json_response({"error": res.get("error", "Raqam olishda xatolik")}, status=400)
 
         # Deduct balance
         await db.update_balance(user_id, -price)
@@ -163,11 +163,16 @@ async def api_numbers_active_handler(request):
     # Check status for each waiting number
     for n in numbers:
         if n["status"] == "WAIT_CODE" and n.get("order_id"):
-            stat = await seen_client.get_number_status(n["order_id"])
-            if isinstance(stat, dict) and stat.get("status") == "RECEIVED" and stat.get("code"):
-                await db.update_number_sms(n["id"], stat["code"])
-                n["sms_code"] = stat["code"]
-                n["status"] = "RECEIVED"
+            try:
+                stat = await seen_client.numbers_status(n["order_id"])
+                if isinstance(stat, dict) and (stat.get("status") in ("OK", "RECEIVED") or stat.get("code")):
+                    code = stat.get("code")
+                    if code:
+                        await db.update_number_sms(n["id"], code)
+                        n["sms_code"] = code
+                        n["status"] = "RECEIVED"
+            except Exception:
+                pass
 
     return web.json_response(numbers)
 

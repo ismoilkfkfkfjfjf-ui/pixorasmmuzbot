@@ -1,300 +1,203 @@
 import aiohttp
 import asyncio
 import logging
-from config import SEEN_API_URL
+from typing import Any, Dict, List, Optional, Union
+from config import SEEN_API_URL, DEFAULT_SEEN_API_KEY
 from database import db
 
 logger = logging.getLogger(__name__)
 
-# Fallback default catalog if API key is not yet set or during initial setup
-DEFAULT_SMM_SERVICES = [
-    # Telegram
-    {
-        "service": 101,
-        "name": "✈️ Telegram Obunachi (O'zbek kanallar / Aralash)",
-        "category": "✈️ Telegram Obunachilar",
-        "type": "Default",
-        "rate": 18000.0,  # 18,000 UZS per 1000
-        "min": 50,
-        "max": 50000,
-        "desc": "Tezkor yetkazish. Chiqib ketish ehtimoli past. Kafolat: 30 kun."
-    },
-    {
-        "service": 102,
-        "name": "✈️ Telegram Obunachi (Toza O'zbek auditoriya)",
-        "category": "✈️ Telegram Obunachilar",
-        "type": "Default",
-        "rate": 32000.0,
-        "min": 100,
-        "max": 20000,
-        "desc": "100% haqiqiy O'zbek foydalanuvchilar. Faol auditoriya."
-    },
-    {
-        "service": 103,
-        "name": "👁️ Telegram Post Ko'rish (Tezkor / So'nggi post)",
-        "category": "✈️ Telegram Ko'rishlar & Reaksiya",
-        "type": "Default",
-        "rate": 1500.0,
-        "min": 100,
-        "max": 100000,
-        "desc": "1-5 daqiqada boshlanadi. Har qanday kanal uchun mos."
-    },
-    {
-        "service": 104,
-        "name": "👍 Telegram Reaksiyalar (Pozitiv ❤️🔥👍)",
-        "category": "✈️ Telegram Ko'rishlar & Reaksiya",
-        "type": "Default",
-        "rate": 3000.0,
-        "min": 50,
-        "max": 10000,
-        "desc": "Aralash ijobiy reaksiyalar. Tezkor start."
-    },
-    # Instagram
-    {
-        "service": 201,
-        "name": "📸 Instagram Obunachi (Sifatli / Chiqmas)",
-        "category": "📸 Instagram Obunachilar",
-        "type": "Default",
-        "rate": 22000.0,
-        "min": 100,
-        "max": 50000,
-        "desc": "Tezkor start. Profillari to'liq profilli obunachilar. Kafolat 30 kun."
-    },
-    {
-        "service": 202,
-        "name": "📸 Instagram Obunachi (O'zbek / Faol)",
-        "category": "📸 Instagram Obunachilar",
-        "type": "Default",
-        "rate": 45000.0,
-        "min": 100,
-        "max": 20000,
-        "desc": "O'zbekiston auditoriyasi. Profil rivojlantirish uchun a'lo."
-    },
-    {
-        "service": 203,
-        "name": "❤️ Instagram Layk (Tezkor / Rasm & Video)",
-        "category": "📸 Instagram Layk & Ko'rish",
-        "type": "Default",
-        "rate": 4000.0,
-        "min": 50,
-        "max": 20000,
-        "desc": "Post joylangandan so'ng darhol kiritish mumkin. Soni cheklanmagan."
-    },
-    {
-        "service": 204,
-        "name": "🎬 Instagram Reels & Video Ko'rish (Tezkor)",
-        "category": "📸 Instagram Layk & Ko'rish",
-        "type": "Default",
-        "rate": 2000.0,
-        "min": 100,
-        "max": 500000,
-        "desc": "Tavsiyalar (Rekomendatsiya)ga chiqish ehtimolini oshiradi."
-    },
-    # TikTok
-    {
-        "service": 301,
-        "name": "🎵 TikTok Obunachi (Dunyo / Tezkor)",
-        "category": "🎵 TikTok Xizmatlari",
-        "type": "Default",
-        "rate": 35000.0,
-        "min": 100,
-        "max": 30000,
-        "desc": "Stream ochish (1000 obunachi) va profilni ko'tarish uchun."
-    },
-    {
-        "service": 302,
-        "name": "🎵 TikTok Video Layklar",
-        "category": "🎵 TikTok Xizmatlari",
-        "type": "Default",
-        "rate": 8000.0,
-        "min": 100,
-        "max": 50000,
-        "desc": "Tezkor yuklanadi. Video reytingini ko'taradi."
-    },
-    {
-        "service": 303,
-        "name": "👁️ TikTok Video Ko'rishlar (Ultra Tez)",
-        "category": "🎵 TikTok Xizmatlari",
-        "type": "Default",
-        "rate": 1000.0,
-        "min": 1000,
-        "max": 1000000,
-        "desc": "Rekomendatsiyaga tezroq tushish uchun ideal."
-    },
-    # YouTube
-    {
-        "service": 401,
-        "name": "🎬 YouTube Obunachi (Monetizatsiya uchun)",
-        "category": "🎬 YouTube Xizmatlari",
-        "type": "Default",
-        "rate": 95000.0,
-        "min": 50,
-        "max": 10000,
-        "desc": "Sekin va xavfsiz qo'shiladi. Chiqib ketmaydi. 30 kun kafolat."
-    },
-    {
-        "service": 402,
-        "name": "👁️ YouTube Video Ko'rish (Real foydalanuvchilar)",
-        "category": "🎬 YouTube Xizmatlari",
-        "type": "Default",
-        "rate": 28000.0,
-        "min": 500,
-        "max": 100000,
-        "desc": "Ushlab turish vaqti (Retention) yuqori ko'rishlar."
-    },
-    {
-        "service": 403,
-        "name": "👍 YouTube Video Layklar",
-        "category": "🎬 YouTube Xizmatlari",
-        "type": "Default",
-        "rate": 15000.0,
-        "min": 50,
-        "max": 20000,
-        "desc": "Yuqori sifatli YouTube layklari."
-    }
-]
+class SeenSMSError(Exception):
+    """Custom exception raised when SeenSMS API returns an error."""
+    def __init__(self, message: str, raw_response: Optional[dict] = None):
+        super().__init__(message)
+        self.message = message
+        self.raw_response = raw_response or {}
 
-# Fallback virtual numbers services & countries
+class SeenSMSClient:
+    """
+    Clean, reusable async client for the official SeenSMS API (https://seensms.uz/api/v1).
+    Supports all actions: SMM, Virtual Numbers, Ready Accounts, Telegram Stars & Premium.
+    Features:
+    - One method per API action
+    - Proper error handling on the 'error' field
+    - Gzip compression enabled via 'Accept-Encoding: gzip'
+    - Configurable timeouts
+    - Dynamic key retrieval from database settings with fallback
+    """
+
+    def __init__(self, api_url: str = SEEN_API_URL, default_key: str = DEFAULT_SEEN_API_KEY, timeout: int = 15):
+        self.api_url = api_url
+        self.default_key = default_key
+        self.timeout = aiohttp.ClientTimeout(total=timeout)
+
+    async def _get_key(self) -> str:
+        key = await db.get_setting("seen_api_key", self.default_key)
+        return key or self.default_key
+
+    async def _request(self, action: str, **params) -> Union[Dict[str, Any], List[Any]]:
+        """Core request method sending action and key with gzip enabled."""
+        key = await self._get_key()
+        if not key:
+            raise SeenSMSError("API kalit kiritilmagan. Admin panel orqali SeenSMS API kalitini kiriting.")
+
+        data = {"key": key, "action": action, **params}
+        # Filter None values
+        data = {k: str(v) for k, v in data.items() if v is not None}
+
+        headers = {
+            "Accept-Encoding": "gzip",
+            "User-Agent": "PixoraSMM-Client/2.0"
+        }
+
+        try:
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(self.api_url, data=data, headers=headers) as resp:
+                    if resp.status == 200:
+                        res = await resp.json()
+                        if isinstance(res, dict) and "error" in res:
+                            logger.warning(f"SeenSMS API error for action '{action}': {res['error']}")
+                            raise SeenSMSError(res["error"], raw_response=res)
+                        return res
+                    else:
+                        text = await resp.text()
+                        logger.error(f"SeenSMS HTTP {resp.status} on action '{action}': {text}")
+                        raise SeenSMSError(f"HTTP Xatosi ({resp.status}): {text}")
+        except asyncio.TimeoutError:
+            logger.error(f"SeenSMS request timeout on action '{action}'")
+            raise SeenSMSError("SeenSMS serveriga ulanish vaqti tugadi (Timeout).")
+        except aiohttp.ClientError as e:
+            logger.error(f"SeenSMS connection error on action '{action}': {e}")
+            raise SeenSMSError(f"Tarmoq xatosi: {str(e)}")
+
+    # ==========================================
+    # 1. SMM SERVICES
+    # ==========================================
+
+    async def services(self) -> List[Dict[str, Any]]:
+        """Get list of available SMM services: [{service, name, type, category, rate, min, max, refill, cancel}]."""
+        res = await self._request("services")
+        return res if isinstance(res, list) else []
+
+    async def add(self, service: int, link: str, quantity: int) -> Dict[str, Any]:
+        """Place a new SMM order -> {order}."""
+        return await self._request("add", service=service, link=link, quantity=quantity)
+
+    async def status(self, order: int) -> Dict[str, Any]:
+        """Check order status -> {charge, start_count, status, remains, currency}."""
+        return await self._request("status", order=order)
+
+    async def refill(self, order: int) -> Dict[str, Any]:
+        """Request refill for an order -> {refill}."""
+        return await self._request("refill", order=order)
+
+    async def cancel(self, order: int) -> Dict[str, Any]:
+        """Cancel an SMM order -> {order, cancel}."""
+        return await self._request("cancel", order=order)
+
+    async def balance(self) -> Dict[str, Any]:
+        """Check account balance -> {balance, currency}."""
+        return await self._request("balance")
+
+    # ==========================================
+    # 2. VIRTUAL NUMBERS (SMS RECEIPT)
+    # ==========================================
+
+    async def numbers_services(self) -> List[Dict[str, Any]]:
+        """List available services for SMS activation -> [{service, name}]."""
+        res = await self._request("numbers_services")
+        return res if isinstance(res, list) else []
+
+    async def numbers_countries(self, service: str) -> List[Dict[str, Any]]:
+        """List available countries & prices for a service -> [{country, name, price, count}]."""
+        res = await self._request("numbers_countries", service=service)
+        return res if isinstance(res, list) else []
+
+    async def numbers_get(self, country: Union[int, str], service: str) -> Dict[str, Any]:
+        """Request a virtual number -> {id, number, cost}."""
+        return await self._request("numbers_get", country=country, service=service)
+
+    async def numbers_status(self, id: int) -> Dict[str, Any]:
+        """Check status / SMS code for a rented number -> {id, status, code} (status: WAITING | OK | EXPIRED)."""
+        return await self._request("numbers_status", id=id)
+
+    async def numbers_cancel(self, id: int) -> Dict[str, Any]:
+        """Cancel virtual number request -> {id, cancel, refunded}."""
+        return await self._request("numbers_cancel", id=id)
+
+    # ==========================================
+    # 3. READY TELEGRAM ACCOUNTS
+    # ==========================================
+
+    async def accounts_countries(self) -> List[Dict[str, Any]]:
+        """List countries with ready Telegram accounts -> [{country, price}]."""
+        res = await self._request("accounts_countries")
+        return res if isinstance(res, list) else []
+
+    async def accounts_get(self, country: Union[int, str]) -> Dict[str, Any]:
+        """Purchase ready Telegram account -> {id, number, cost}."""
+        return await self._request("accounts_get", country=country)
+
+    async def accounts_code(self, id: int) -> Dict[str, Any]:
+        """Retrieve login code for account -> {id, status, code, password} (status: WAITING | OK)."""
+        return await self._request("accounts_code", id=id)
+
+    # ==========================================
+    # 4. TELEGRAM STARS & PREMIUM
+    # ==========================================
+
+    async def user_info(self, username: str, type: str = "stars") -> Dict[str, Any]:
+        """Get Telegram user info for gifting Stars/Premium -> {found, name, recipient, avatar}."""
+        return await self._request("user_info", username=username, type=type)
+
+    async def stars_prices(self) -> List[Dict[str, Any]]:
+        """Get Telegram Stars packages and prices -> [{quantity, price}]."""
+        res = await self._request("stars_prices")
+        return res if isinstance(res, list) else []
+
+    async def stars_buy(self, username: str, quantity: int) -> Dict[str, Any]:
+        """Buy Telegram Stars for user -> {id, status, amount}."""
+        return await self._request("stars_buy", username=username, quantity=quantity)
+
+    async def premium_prices(self) -> List[Dict[str, Any]]:
+        """Get Telegram Premium packages and prices -> [{months, price}]."""
+        res = await self._request("premium_prices")
+        return res if isinstance(res, list) else []
+
+    async def premium_buy(self, username: str, months: int) -> Dict[str, Any]:
+        """Buy Telegram Premium subscription for user -> {id, status, amount}."""
+        return await self._request("premium_buy", username=username, months=months)
+
+    async def stars_status(self, id: int) -> Dict[str, Any]:
+        """Check status of Stars or Premium order -> {id, type, username, amount, status, error}."""
+        return await self._request("stars_status", id=id)
+
+    # Backward compatibility helper for sync
+    async def fetch_services(self) -> List[Dict[str, Any]]:
+        try:
+            srvs = await self.services()
+            if srvs:
+                await db.sync_services(srvs)
+                return srvs
+        except Exception as e:
+            logger.warning(f"Could not fetch live services: {e}")
+        return await db.get_services()
+
 DEFAULT_NUMBER_SERVICES = [
-    {"code": "tg", "name": "✈️ Telegram", "price": 9500},
-    {"code": "wa", "name": "💬 WhatsApp", "price": 12000},
-    {"code": "ig", "name": "📸 Instagram", "price": 6000},
-    {"code": "tk", "name": "🎵 TikTok", "price": 7000},
-    {"code": "go", "name": "🔍 Google / Gmail", "price": 8500},
-    {"code": "vk", "name": "🟦 VKontakte", "price": 7500},
-    {"code": "fb", "name": "🔷 Facebook", "price": 6500},
-    {"code": "vi", "name": "🟣 Viber", "price": 8000}
+    {"service": "tg", "name": "✈️ Telegram"},
+    {"service": "wa", "name": "💬 WhatsApp"},
+    {"service": "ig", "name": "📸 Instagram"},
+    {"service": "tk", "name": "🎵 TikTok"},
+    {"service": "go", "name": "🔍 Google / Gmail"},
+    {"service": "fb", "name": "🔷 Facebook"}
 ]
 
 DEFAULT_NUMBER_COUNTRIES = [
-    {"country": 1, "name": "🇷🇺 Rossiya (+7)", "price": 8500},
-    {"country": 2, "name": "🇰🇿 Qozog'iston (+7)", "price": 9000},
-    {"country": 3, "name": "🇰🇬 Qirg'iziston (+996)", "price": 9500},
-    {"country": 4, "name": "🇺🇸 AQSh (+1)", "price": 12000},
-    {"country": 5, "name": "🇬🇧 Buyuk Britaniya (+44)", "price": 14000},
-    {"country": 6, "name": "🇮🇩 Indoneziya (+62)", "price": 6500},
-    {"country": 7, "name": "🇻🇳 Vyetnam (+84)", "price": 6000},
-    {"country": 8, "name": "🇵🇭 Filippin (+63)", "price": 6500}
+    {"country": "31", "name": "Janubiy Afrika", "price": 1313, "count": 300000},
+    {"country": "6", "name": "Indoneziya", "price": 1488, "count": 79000},
+    {"country": "1", "name": "Rossiya (+7)", "price": 8500, "count": 50000},
+    {"country": "2", "name": "Qozog'iston (+7)", "price": 9000, "count": 25000},
+    {"country": "12", "name": "AQSh (+1)", "price": 12000, "count": 15000}
 ]
-
-
-class SeenSMSClient:
-    def __init__(self, api_url=SEEN_API_URL):
-        self.api_url = api_url
-
-    async def _get_key(self):
-        return await db.get_setting("seen_api_key", "")
-
-    async def _post(self, data: dict):
-        key = await self._get_key()
-        if not key:
-            return {"error": "API key kiritilmagan. Admin /admin orqali kalit kiritishi lozim."}
-
-        post_data = {"key": key, **data}
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(self.api_url, data=post_data, timeout=15) as resp:
-                    if resp.status == 200:
-                        return await resp.json()
-                    else:
-                        text = await resp.text()
-                        logger.error(f"SeenSMS API error status {resp.status}: {text}")
-                        return {"error": f"API Xatosi ({resp.status}): {text}"}
-        except Exception as e:
-            logger.error(f"SeenSMS connection error: {e}")
-            return {"error": f"Tarmoq xatosi: {str(e)}"}
-
-    async def get_balance(self):
-        """Returns {balance: float, currency: str} or fallback."""
-        key = await self._get_key()
-        if not key:
-            return {"balance": 0.0, "currency": "UZS", "connected": False}
-        res = await self._post({"action": "balance"})
-        if isinstance(res, dict) and "balance" in res:
-            return {"balance": float(res["balance"]), "currency": res.get("currency", "UZS"), "connected": True}
-        return {"balance": 0.0, "currency": "UZS", "connected": False, "error": res.get("error")}
-
-    async def fetch_services(self):
-        """Fetches services from live API or falls back to standard catalog."""
-        key = await self._get_key()
-        if key:
-            res = await self._post({"action": "services"})
-            if isinstance(res, list) and len(res) > 0:
-                await db.sync_services(res)
-                return res
-        # If no key or API failed, sync default catalog to DB
-        await db.sync_services(DEFAULT_SMM_SERVICES)
-        return DEFAULT_SMM_SERVICES
-
-    async def add_order(self, service_id: int, link: str, quantity: int):
-        """Creates an SMM order via SeenSMS API."""
-        key = await self._get_key()
-        if not key:
-            # Simulation mode when API key is pending
-            import random
-            sim_id = random.randint(100000, 999999)
-            return {"order": sim_id, "simulated": True}
-
-        res = await self._post({
-            "action": "add",
-            "service": service_id,
-            "link": link,
-            "quantity": quantity
-        })
-        return res
-
-    async def get_order_status(self, order_id: int):
-        """Checks SMM order status."""
-        key = await self._get_key()
-        if not key:
-            return {"status": "Processing", "remains": 0, "start_count": 100}
-        return await self._post({"action": "status", "order": order_id})
-
-    # Virtual Numbers Methods
-    async def get_numbers_services(self):
-        key = await self._get_key()
-        if key:
-            res = await self._post({"action": "numbers_services"})
-            if isinstance(res, list) and len(res) > 0:
-                return res
-        return DEFAULT_NUMBER_SERVICES
-
-    async def get_numbers_countries(self, service_code: str):
-        key = await self._get_key()
-        if key:
-            res = await self._post({"action": "numbers_countries", "service": service_code})
-            if isinstance(res, list) and len(res) > 0:
-                return res
-        return DEFAULT_NUMBER_COUNTRIES
-
-    async def buy_number(self, country: int, service_code: str):
-        key = await self._get_key()
-        if not key:
-            # Demo/simulated number
-            import random
-            sim_order_id = random.randint(200000, 899999)
-            sim_phone = f"+99890{random.randint(1000000, 9999999)}"
-            return {"id": sim_order_id, "phone": sim_phone, "simulated": True}
-
-        return await self._post({
-            "action": "numbers_get",
-            "country": country,
-            "service": service_code
-        })
-
-    async def get_number_status(self, number_order_id: int):
-        key = await self._get_key()
-        if not key:
-            # Simulated code after delay
-            import random
-            return {"status": "RECEIVED", "code": str(random.randint(10000, 99999))}
-        return await self._post({"action": "numbers_status", "id": number_order_id})
-
-    async def cancel_number(self, number_order_id: int):
-        key = await self._get_key()
-        if not key:
-            return {"status": "CANCELLED"}
-        return await self._post({"action": "numbers_cancel", "id": number_order_id})
-
 
 seen_client = SeenSMSClient()

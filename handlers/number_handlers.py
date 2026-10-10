@@ -102,17 +102,24 @@ async def number_buy_execute(callback: types.CallbackQuery):
     wait_msg = await callback.message.answer("⏳ Raqam olinmoqda, iltimos kuting...")
 
     # Purchase from API
-    res = await seen_client.buy_number(country_id, service_code)
+    try:
+        res = await seen_client.numbers_get(country_id, service_code)
+    except Exception as e:
+        await wait_msg.delete()
+        await callback.message.answer(f"❌ Xatolik: {str(e)}")
+        await callback.answer()
+        return
+
     await wait_msg.delete()
 
-    if not isinstance(res, dict) or ("phone" not in res and "id" not in res):
+    phone = res.get("number") or res.get("phone")
+    order_id = res.get("id")
+
+    if not phone or not order_id:
         err = res.get("error", "Raqam mavjud emas yoki xatolik yuz berdi")
         await callback.message.answer(f"❌ Xatolik: {err}")
         await callback.answer()
         return
-
-    phone = res.get("phone", "+998901234567")
-    order_id = res.get("id", 1001)
 
     # Deduct balance
     await db.update_balance(user_id, -price)
@@ -157,11 +164,15 @@ async def poll_sms_for_number(bot, user_id: int, num_id: int, order_id: int, pho
         if not num or num.get("status") in ("CANCELLED", "RECEIVED"):
             break
 
-        status_res = await seen_client.get_number_status(order_id)
+        try:
+            status_res = await seen_client.numbers_status(order_id)
+        except Exception:
+            continue
+
         if isinstance(status_res, dict):
             status = status_res.get("status")
             code = status_res.get("code")
-            if (status == "RECEIVED" or code) and code:
+            if (status in ("OK", "RECEIVED") or code) and code:
                 await db.update_number_sms(num_id, code, "RECEIVED")
                 try:
                     await bot.send_message(
@@ -189,7 +200,10 @@ async def number_cancel_handler(callback: types.CallbackQuery):
         await callback.answer("Bu raqam allaqachon kod qabul qilgan, bekor qilib bo'lmaydi!", show_alert=True)
         return
 
-    await seen_client.cancel_number(order_id)
+    try:
+        await seen_client.numbers_cancel(order_id)
+    except Exception:
+        pass
     await db.update_number_status(num_id, "CANCELLED")
     # Refund balance
     await db.update_balance(user_id, price)
