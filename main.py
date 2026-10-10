@@ -70,6 +70,24 @@ async def main():
     logger.info(f"🌐 Web App Mini App server running at http://{WEB_HOST}:{WEB_PORT}")
     logger.info(f"🚀 Bot polling started! Admin ID: {ADMINS} | WebApp URL: {current_webapp_url}")
 
+    async def keep_alive_ping(url: str):
+        if not url or "localhost" in url or "127.0.0.1" in url:
+            return
+        await asyncio.sleep(60)
+        while True:
+            try:
+                health_url = f"{url.rstrip('/')}/health"
+                import aiohttp
+                async with aiohttp.ClientSession() as s:
+                    async with s.get(health_url, timeout=10) as resp:
+                        logger.info(f"💓 Keep-alive ping to {health_url}: {resp.status}")
+            except Exception as ex:
+                logger.debug(f"Keep-alive ping error: {ex}")
+            await asyncio.sleep(600)  # Har 10 daqiqada bir marta
+
+    if current_webapp_url and current_webapp_url.startswith("https://"):
+        asyncio.create_task(keep_alive_ping(current_webapp_url))
+
     try:
         # Notify admins that bot is running
         bot_info = await bot.get_me()
