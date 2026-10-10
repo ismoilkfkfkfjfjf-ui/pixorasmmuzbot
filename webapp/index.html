@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pixora SMM — Web App</title>
+    <!-- Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Top Banner Header -->
+        <header class="header-card">
+            <div class="banner-wrapper">
+                <img src="/static/pixora_banner.jpg" alt="Pixora SMM" class="banner-img">
+                <div class="banner-overlay"></div>
+            </div>
+            
+            <div class="user-info-bar">
+                <div class="user-profile">
+                    <div class="user-avatar" id="userAvatar">
+                        <i class="fa-solid fa-user-astronaut"></i>
+                    </div>
+                    <div class="user-details">
+                        <h3 id="userName">Foydalanuvchi</h3>
+                        <span id="userTag" class="user-tag">@pixora_user</span>
+                    </div>
+                </div>
+                <div class="balance-badge">
+                    <div class="balance-label">Hisobingiz:</div>
+                    <div class="balance-amount" id="userBalance">0 UZS</div>
+                    <button class="topup-btn" onclick="openDepositModal()">
+                        <i class="fa-solid fa-plus"></i> To'ldirish
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('smm')">
+                <i class="fa-solid fa-bolt"></i> SMM Xizmatlar
+            </button>
+            <button class="tab-btn" onclick="switchTab('numbers')">
+                <i class="fa-solid fa-sim-card"></i> Virtual Raqam
+            </button>
+            <button class="tab-btn" onclick="switchTab('orders')">
+                <i class="fa-solid fa-clock-rotate-left"></i> Buyurtmalar
+            </button>
+            <button class="tab-btn" onclick="switchTab('referral')">
+                <i class="fa-solid fa-gift"></i> Referal
+            </button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            <!-- TAB 1: SMM SERVICES -->
+            <section id="tab-smm" class="tab-content active">
+                <!-- Category Pills -->
+                <div class="category-scroll" id="categoryList">
+                    <button class="cat-pill active" onclick="filterCategory('all', this)">
+                        <i class="fa-solid fa-layer-group"></i> Barchasi
+                    </button>
+                    <button class="cat-pill" onclick="filterCategory('telegram', this)">
+                        <i class="fa-brands fa-telegram"></i> Telegram
+                    </button>
+                    <button class="cat-pill" onclick="filterCategory('instagram', this)">
+                        <i class="fa-brands fa-instagram"></i> Instagram
+                    </button>
+                    <button class="cat-pill" onclick="filterCategory('tiktok', this)">
+                        <i class="fa-brands fa-tiktok"></i> TikTok
+                    </button>
+                    <button class="cat-pill" onclick="filterCategory('youtube', this)">
+                        <i class="fa-brands fa-youtube"></i> YouTube
+                    </button>
+                </div>
+
+                <!-- Search Input -->
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchInput" placeholder="Xizmat nomini qidiring..." oninput="handleSearch(this.value)">
+                </div>
+
+                <!-- Services Grid -->
+                <div class="services-list" id="servicesGrid">
+                    <div class="loading-spinner">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Xizmatlar yuklanmoqda...
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: VIRTUAL NUMBERS -->
+            <section id="tab-numbers" class="tab-content">
+                <div class="section-card">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-mobile-screen-button"></i> Yangi Raqam Olish</h2>
+                        <p>Xizmatni va davlatni tanlang, SMS kodini real vaqt rejimida qabul qiling!</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>1. Servisni tanlang:</label>
+                        <select id="numberServiceSelect" onchange="loadCountriesForService()">
+                            <option value="tg">✈️ Telegram</option>
+                            <option value="wa">💬 WhatsApp</option>
+                            <option value="ig">📸 Instagram</option>
+                            <option value="tk">🎵 TikTok</option>
+                            <option value="go">🔍 Google / Gmail</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>2. Davlatni tanlang:</label>
+                        <select id="numberCountrySelect" onchange="updateNumberPrice()">
+                            <option value="1" data-price="8500">🇷🇺 Rossiya (+7) — 8,500 UZS</option>
+                            <option value="2" data-price="9000">🇰🇿 Qozog'iston (+7) — 9,000 UZS</option>
+                            <option value="3" data-price="9500">🇰🇬 Qirg'iziston (+996) — 9,500 UZS</option>
+                            <option value="4" data-price="12000">🇺🇸 AQSh (+1) — 12,000 UZS</option>
+                            <option value="5" data-price="14000">🇬🇧 Buyuk Britaniya (+44) — 14,000 UZS</option>
+                        </select>
+                    </div>
+
+                    <div class="price-display-box">
+                        <span>Xarid narxi:</span>
+                        <strong id="numberSelectedPrice">8,500 UZS</strong>
+                    </div>
+
+                    <button class="action-btn-primary" onclick="buyVirtualNumber()">
+                        <i class="fa-solid fa-cart-shopping"></i> Raqamni Sotib Olish
+                    </button>
+                </div>
+
+                <!-- Active Numbers Box -->
+                <div class="active-numbers-section">
+                    <h3><i class="fa-solid fa-tower-broadcast"></i> Faol Raqamlaringiz</h3>
+                    <div id="activeNumbersList" class="numbers-grid">
+                        <div class="empty-state">Hozirda faol raqamingiz yo'q.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: USER ORDERS -->
+            <section id="tab-orders" class="tab-content">
+                <div class="section-card">
+                    <h2><i class="fa-solid fa-list-check"></i> Buyurtmalar Tarixi</h2>
+                    <div id="ordersList" class="orders-list">
+                        <div class="loading-spinner">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i> Yuklanmoqda...
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: REFERRAL SYSTEM -->
+            <section id="tab-referral" class="tab-content">
+                <div class="section-card referral-card">
+                    <div class="ref-icon"><i class="fa-solid fa-users-rays"></i></div>
+                    <h2>Do'stlaringizni taklif qiling!</h2>
+                    <p>Har bir taklif qilingan do'stingiz uchun <strong>500 UZS</strong> bonus hisobingizga qo'shiladi!</p>
+
+                    <div class="ref-link-box">
+                        <input type="text" id="referralLinkInput" readonly value="https://t.me/PixoraSmmUzBot?start=ref_0">
+                        <button onclick="copyRefLink()"><i class="fa-regular fa-copy"></i> Nusxalash</button>
+                    </div>
+
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <span class="stat-num" id="refCount">0</span>
+                            <span class="stat-title">Taklif qilinganlar</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-num" id="refEarned">0 UZS</span>
+                            <span class="stat-title">Jami daromad</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Order Modal -->
+        <div id="orderModal" class="modal-backdrop">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="modalServiceTitle">Buyurtma berish</h3>
+                    <button class="close-modal-btn" onclick="closeOrderModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="service-meta-box">
+                        <p id="modalServiceDesc">Tavsif yuklanmoqda...</p>
+                        <div class="meta-tags">
+                            <span id="modalMinMax">Min: 50 | Max: 10000</span>
+                            <span id="modalRate">1000 ta: 15,000 UZS</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="orderLink">Havola (Kanal, Profil yoki Post):</label>
+                        <input type="url" id="orderLink" placeholder="https://t.me/kanal_nomi yoki https://instagram.com/...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="orderQuantity">Miqdor (dona):</label>
+                        <input type="number" id="orderQuantity" placeholder="1000" oninput="calculateModalPrice()">
+                    </div>
+
+                    <div class="total-calc-box">
+                        <span>Hisoblangan summa:</span>
+                        <strong id="modalTotalPrice">0 UZS</strong>
+                    </div>
+
+                    <button class="action-btn-primary" id="submitOrderBtn" onclick="submitModalOrder()">
+                        <i class="fa-solid fa-check"></i> Buyurtmani tasdiqlash
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deposit Info Modal -->
+        <div id="depositModal" class="modal-backdrop">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-wallet"></i> Balansni to'ldirish</h3>
+                    <button class="close-modal-btn" onclick="closeDepositModal()">&times;</button>
+                </div>
+                <div class="modal-body deposit-info-body">
+                    <p>Hisobingizni to'ldirish uchun quyidagi kartaga to'lov qiling va chekni Telegram botimizga yuboring:</p>
+                    <div class="card-box">
+                        <div class="card-num" id="depositCardNum">8600 0000 0000 0000</div>
+                        <div class="card-name" id="depositCardName">Pixora SMM</div>
+                    </div>
+                    <p class="deposit-tip">💡 To'lov qilgach, Telegram botda <b>💳 Balans</b> bo'limiga kirib to'lov chekini yuboring. Admin bir necha daqiqada tasdiqlaydi!</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

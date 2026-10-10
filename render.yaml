@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: pixora-smm-bot
+    env: python
+    region: frankfurt
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: BOT_TOKEN
+        value: 8916949352:AAFdxDRR6704E_Q87kREKMYE1KULHnBmJMk
+      - key: SEEN_API_KEY
+        value: ""
