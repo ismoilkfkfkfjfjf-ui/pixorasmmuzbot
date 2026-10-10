@@ -14,7 +14,7 @@ DEFAULT_SEEN_API_KEY = os.getenv("SEEN_API_KEY", "1ybZkQeX3znP4a2poz7ZW3VYr6Men8
 # Web Server & Web App Config
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("PORT", os.getenv("WEB_PORT", 8080)))
-WEBAPP_URL = os.getenv("WEBAPP_URL", f"http://localhost:{WEB_PORT}")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://pixora-smm-bot.onrender.com")
 
 # Business defaults
 DEFAULT_MARGIN_PERCENT = 20.0  # 20% margin for admin

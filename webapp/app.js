@@ -428,3 +428,71 @@ function escapeHtml(str) {
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[m]);
 }
+
+// Free Services Logic
+let selectedFreeType = null;
+const freeServicesConfig = {
+    'tg_sub': { title: "✈️ Bepul Telegram Obunachi", qty: "20 ta", desc: "Telegram kanal yoki guruh havolasini kiriting", placeholder: "https://t.me/kanal_nomi" },
+    'tg_view': { title: "✈️ Bepul Telegram Ko'rish", qty: "100 ta", desc: "Telegram post havolasini kiriting", placeholder: "https://t.me/kanal/123" },
+    'tg_react': { title: "✈️ Bepul Telegram Reaksiya", qty: "30 ta", desc: "Telegram post havolasini kiriting", placeholder: "https://t.me/kanal/123" },
+    'ig_view': { title: "📸 Bepul Instagram Ko'rish", qty: "100 ta", desc: "Instagram video yoki Reels havolasini kiriting", placeholder: "https://instagram.com/reel/..." }
+};
+
+function openFreeOrderModal(type) {
+    selectedFreeType = type;
+    const cfg = freeServicesConfig[type];
+    if (!cfg) return;
+
+    document.getElementById("freeModalTitle").textContent = cfg.title;
+    document.getElementById("freeModalQty").textContent = `Miqdor: ${cfg.qty}`;
+    document.getElementById("freeModalDesc").textContent = cfg.desc;
+    document.getElementById("freeOrderLink").placeholder = cfg.placeholder;
+    document.getElementById("freeOrderLink").value = "";
+
+    document.getElementById("freeOrderModal").classList.add("active");
+    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+}
+
+function closeFreeOrderModal() {
+    document.getElementById("freeOrderModal").classList.remove("active");
+    selectedFreeType = null;
+}
+
+async function submitFreeOrder() {
+    if (!selectedFreeType) return;
+    const link = document.getElementById("freeOrderLink").value.trim();
+    if (!link) {
+        alert("Iltimos, havolani kiriting!");
+        return;
+    }
+
+    const btn = document.getElementById("submitFreeBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Yuborilmoqda...`;
+
+    try {
+        const res = await fetch("/api/free/order", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_id: currentUser.id,
+                service_type: selectedFreeType,
+                link: link
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showToast(`🎉 Bepul xizmatingiz qabul qilindi! (#${data.order_id})`);
+            closeFreeOrderModal();
+            await loadUserOrders();
+        } else {
+            alert(`Xatolik: ${data.error || "Bepul buyurtma berilmadi"}`);
+        }
+    } catch (e) {
+        alert(`Tarmoq xatosi: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-gift"></i> Bepul buyurtmani olish`;
+    }
+}

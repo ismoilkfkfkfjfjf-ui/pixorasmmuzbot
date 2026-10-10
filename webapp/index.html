@@ -46,16 +46,19 @@
         <!-- Navigation Tabs -->
         <nav class="nav-tabs">
             <button class="tab-btn active" onclick="switchTab('smm')">
-                <i class="fa-solid fa-bolt"></i> SMM Xizmatlar
+                <i class="fa-solid fa-bolt"></i> SMM
+            </button>
+            <button class="tab-btn" onclick="switchTab('free')">
+                <i class="fa-solid fa-gift"></i> Bepul
             </button>
             <button class="tab-btn" onclick="switchTab('numbers')">
-                <i class="fa-solid fa-sim-card"></i> Virtual Raqam
+                <i class="fa-solid fa-sim-card"></i> Raqam
             </button>
             <button class="tab-btn" onclick="switchTab('orders')">
-                <i class="fa-solid fa-clock-rotate-left"></i> Buyurtmalar
+                <i class="fa-solid fa-clock-rotate-left"></i> Tarix
             </button>
             <button class="tab-btn" onclick="switchTab('referral')">
-                <i class="fa-solid fa-gift"></i> Referal
+                <i class="fa-solid fa-users"></i> Referal
             </button>
         </nav>
 
@@ -92,6 +95,31 @@
                 <div class="services-list" id="servicesGrid">
                     <div class="loading-spinner">
                         <i class="fa-solid fa-circle-notch fa-spin"></i> Xizmatlar yuklanmoqda...
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: FREE SERVICES (Matching user screenshot) -->
+            <section id="tab-free" class="tab-content">
+                <div class="section-card free-services-card">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-gift"></i> Bepul xizmatlar</h2>
+                        <p>SeenSMS orqali har 24 soatda bepul buyurtma bering!</p>
+                    </div>
+
+                    <div class="free-buttons-stack" id="freeButtonsStack">
+                        <button class="free-action-btn" onclick="openFreeOrderModal('tg_sub')">
+                            <i class="fa-brands fa-telegram"></i> Bepul Telegram Obunachi (20 ta)
+                        </button>
+                        <button class="free-action-btn" onclick="openFreeOrderModal('tg_view')">
+                            <i class="fa-brands fa-telegram"></i> Bepul Telegram Ko'rish (100 ta)
+                        </button>
+                        <button class="free-action-btn" onclick="openFreeOrderModal('tg_react')">
+                            <i class="fa-brands fa-telegram"></i> Bepul Telegram Reaksiya (30 ta)
+                        </button>
+                        <button class="free-action-btn" onclick="openFreeOrderModal('ig_view')">
+                            <i class="fa-brands fa-instagram"></i> Bepul Instagram Ko'rish (100 ta)
+                        </button>
                     </div>
                 </div>
             </section>
@@ -235,6 +263,34 @@
                         <div class="card-name" id="depositCardName">Pixora SMM</div>
                     </div>
                     <p class="deposit-tip">💡 To'lov qilgach, Telegram botda <b>💳 Balans</b> bo'limiga kirib to'lov chekini yuboring. Admin bir necha daqiqada tasdiqlaydi!</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Free Service Order Modal -->
+        <div id="freeOrderModal" class="modal-backdrop">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3 id="freeModalTitle">Bepul xizmat</h3>
+                    <button class="close-modal-btn" onclick="closeFreeOrderModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="service-meta-box">
+                        <p id="freeModalDesc">Kanal yoki post havolasini kiriting</p>
+                        <div class="meta-tags">
+                            <span id="freeModalQty">Miqdor: 20 ta</span>
+                            <span style="color: #00e676; font-weight: 800;">NARXI: 0 UZS (BEPUL)</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label id="freeModalLabel" for="freeOrderLink">Havola:</label>
+                        <input type="url" id="freeOrderLink" placeholder="https://t.me/... yoki https://instagram.com/...">
+                    </div>
+
+                    <button class="action-btn-primary" id="submitFreeBtn" onclick="submitFreeOrder()">
+                        <i class="fa-solid fa-gift"></i> Bepul buyurtmani olish
+                    </button>
                 </div>
             </div>
         </div>

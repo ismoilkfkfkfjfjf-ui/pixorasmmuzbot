@@ -105,6 +105,17 @@ class Database:
                 )
             """)
 
+            # Free Orders table (for 24h cooldown)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS free_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id BIGINT NOT NULL,
+                    service_type TEXT NOT NULL,
+                    link TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             await db.commit()
 
         # Seed initial default settings if missing
@@ -355,5 +366,45 @@ class Database:
                 "approved_deposits": approved_deposits or 0.0,
                 "pending_deposits": pending_deposits or 0
             }
+
+    # Free Services
+    async def can_use_free_service(self, user_id: int, service_type: str = None) -> tuple[bool, int]:
+        async with aiosqlite.connect(self.db_path) as db:
+            if service_type:
+                cursor = await db.execute("""
+                    SELECT created_at FROM free_orders 
+                    WHERE user_id = ? AND service_type = ? 
+                    ORDER BY id DESC LIMIT 1
+                """, (user_id, service_type))
+            else:
+                cursor = await db.execute("""
+                    SELECT created_at FROM free_orders 
+                    WHERE user_id = ? 
+                    ORDER BY id DESC LIMIT 1
+                """, (user_id,))
+            row = await cursor.fetchone()
+            if not row:
+                return True, 0
+
+            from datetime import datetime
+            try:
+                # sqlite CURRENT_TIMESTAMP format is 'YYYY-MM-DD HH:MM:SS'
+                time_str = row[0]
+                last_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+                now = datetime.utcnow()
+                diff_hours = (now - last_time).total_seconds() / 3600
+                if diff_hours >= 24:
+                    return True, 0
+                return False, max(1, int(24 - diff_hours))
+            except Exception:
+                return True, 0
+
+    async def record_free_service(self, user_id: int, service_type: str, link: str):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO free_orders (user_id, service_type, link, created_at)
+                VALUES (?, ?, ?, datetime('now'))
+            """, (user_id, service_type, link))
+            await db.commit()
 
 db = Database()

@@ -12,6 +12,7 @@ from database import db
 from seen_api import seen_client
 from web_server import create_web_app
 
+from handlers.free_handlers import router as free_router
 from handlers.user_handlers import router as user_router
 from handlers.smm_handlers import router as smm_router
 from handlers.number_handlers import router as number_router
@@ -44,6 +45,7 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     # Include routers
+    dp.include_router(free_router)
     dp.include_router(user_router)
     dp.include_router(smm_router)
     dp.include_router(number_router)

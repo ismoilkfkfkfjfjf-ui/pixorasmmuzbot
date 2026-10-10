@@ -176,6 +176,68 @@ async def api_numbers_active_handler(request):
 
     return web.json_response(numbers)
 
+FREE_SERVICES_MAP = {
+    "tg_sub": {"name": "✈️ Bepul Telegram Obunachi", "service_id": 11015, "quantity": 20, "desc": "20 ta bepul obunachi"},
+    "tg_view": {"name": "✈️ Bepul Telegram Ko'rish", "service_id": 134, "quantity": 100, "desc": "100 ta bepul ko'rish"},
+    "tg_react": {"name": "✈️ Bepul Telegram Reaksiya", "service_id": 436, "quantity": 30, "desc": "30 ta bepul reaksiya"},
+    "ig_view": {"name": "📸 Bepul Instagram Ko'rish", "service_id": 127, "quantity": 100, "desc": "100 ta bepul ko'rish"}
+}
+
+async def api_free_services_handler(request):
+    user_id = int(request.query.get("user_id", 0))
+    result = []
+    for k, v in FREE_SERVICES_MAP.items():
+        can_use, hours = await db.can_use_free_service(user_id, k) if user_id else (True, 0)
+        result.append({
+            "key": k,
+            "name": v["name"],
+            "quantity": v["quantity"],
+            "desc": v["desc"],
+            "can_use": can_use,
+            "hours_left": hours
+        })
+    return web.json_response(result)
+
+async def api_free_order_handler(request):
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        service_type = data.get("service_type", "")
+        link = data.get("link", "").strip()
+
+        if not user_id or not service_type or not link:
+            return web.json_response({"error": "Parametrlar to'liq emas"}, status=400)
+
+        cfg = FREE_SERVICES_MAP.get(service_type)
+        if not cfg:
+            return web.json_response({"error": "Noma'lum bepul xizmat"}, status=400)
+
+        can_use, hours = await db.can_use_free_service(user_id, service_type)
+        if not can_use:
+            return web.json_response({"error": f"Siz bu bepul xizmatdan yaqinda foydalangansiz. Keyingi bepul xizmat {hours} soatdan so'ng ochiladi."}, status=400)
+
+        try:
+            api_res = await seen_client.add(cfg["service_id"], link, cfg["quantity"])
+            api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+        except Exception:
+            api_order_id = None
+
+        await db.record_free_service(user_id, service_type, link)
+        order_id = await db.add_order(
+            user_id=user_id,
+            service_id=cfg["service_id"],
+            service_name=cfg["name"],
+            category="🎁 Bepul Xizmatlar",
+            link=link,
+            quantity=cfg["quantity"],
+            price=0.0,
+            api_order_id=api_order_id
+        )
+
+        return web.json_response({"success": True, "order_id": order_id, "name": cfg["name"]})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def api_user_orders_handler(request):
     user_id = int(request.query.get("user_id", 0))
     orders = await db.get_user_orders(user_id, limit=20)
@@ -196,6 +258,8 @@ def create_web_app():
     app.router.add_post("/api/numbers/buy", api_numbers_buy_handler)
     app.router.add_get("/api/numbers/active", api_numbers_active_handler)
     app.router.add_get("/api/user/orders", api_user_orders_handler)
+    app.router.add_get("/api/free/services", api_free_services_handler)
+    app.router.add_post("/api/free/order", api_free_order_handler)
 
     # Static assets
     app.router.add_static("/static", path=str(BASE_DIR / "webapp"), name="webapp_static")

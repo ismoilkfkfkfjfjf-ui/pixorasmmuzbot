@@ -5,6 +5,9 @@ class OrderStates(StatesGroup):
     waiting_for_quantity = State()
     confirm_order = State()
 
+class FreeOrderStates(StatesGroup):
+    waiting_for_link = State()
+
 class DepositStates(StatesGroup):
     waiting_for_amount = State()
     waiting_for_receipt = State()

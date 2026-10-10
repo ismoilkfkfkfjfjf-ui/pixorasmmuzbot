@@ -5,19 +5,23 @@ def get_start_inline_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Xabar tagidagi asosiy Inline menyu tugmalari."""
     buttons = [
         [
-            InlineKeyboardButton(text="⚡ SMM Xizmatlari", callback_data="btn_smm"),
-            InlineKeyboardButton(text="📲 Virtual Raqamlar", callback_data="btn_numbers")
+            InlineKeyboardButton(text="🎁 Bepul Xizmatlar", callback_data="btn_free"),
+            InlineKeyboardButton(text="⚡ SMM Xizmatlari", callback_data="btn_smm")
         ],
         [
-            InlineKeyboardButton(text="💳 Balans to'ldirish", callback_data="btn_balance"),
-            InlineKeyboardButton(text="👤 Shaxsiy Kabinet", callback_data="btn_profile")
+            InlineKeyboardButton(text="📲 Virtual Raqamlar", callback_data="btn_numbers"),
+            InlineKeyboardButton(text="💳 Balans to'ldirish", callback_data="btn_balance")
         ],
         [
-            InlineKeyboardButton(text="📥 Bio & Profil Rasm", callback_data="btn_downloader"),
+            InlineKeyboardButton(text="👤 Shaxsiy Kabinet", callback_data="btn_profile"),
             InlineKeyboardButton(text="📦 Buyurtmalarim", callback_data="btn_orders")
         ],
         [
-            InlineKeyboardButton(text="🛍️ Xizmatlar Do'koni", callback_data="open_shop"),
+            InlineKeyboardButton(text="📥 Bio & Profil Rasm", callback_data="btn_downloader"),
+            InlineKeyboardButton(text="🛍️ Xizmatlar Do'koni", callback_data="open_shop")
+        ],
+        [
+            InlineKeyboardButton(text="📱 Mini App (Do'kon)", web_app=WebAppInfo(url=WEBAPP_URL)),
             InlineKeyboardButton(text="💬 Qo'llab-quvvatlash", callback_data="btn_support")
         ]
     ]
@@ -32,19 +36,22 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     """Pastki Reply klaviatura tugmalari."""
     buttons = [
         [
-            KeyboardButton(text="⚡ SMM Xizmatlari"),
-            KeyboardButton(text="📲 Virtual Raqamlar")
+            KeyboardButton(text="🎁 Bepul Xizmatlar"),
+            KeyboardButton(text="⚡ SMM Xizmatlari")
         ],
         [
-            KeyboardButton(text="💳 Balans to'ldirish"),
-            KeyboardButton(text="👤 Shaxsiy Kabinet")
+            KeyboardButton(text="📲 Virtual Raqamlar"),
+            KeyboardButton(text="💳 Balans to'ldirish")
         ],
         [
-            KeyboardButton(text="📥 Bio & Profil Rasm"),
+            KeyboardButton(text="👤 Shaxsiy Kabinet"),
             KeyboardButton(text="📦 Buyurtmalarim")
         ],
         [
-            KeyboardButton(text="🛍️ Xizmatlar Do'koni"),
+            KeyboardButton(text="📥 Bio & Profil Rasm"),
+            KeyboardButton(text="🛍️ Xizmatlar Do'koni")
+        ],
+        [
             KeyboardButton(text="💬 Qo'llab-quvvatlash")
         ]
     ]
@@ -53,6 +60,17 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         buttons.append([KeyboardButton(text="⚙️ Admin Panel")])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+
+
+def get_free_services_inline() -> InlineKeyboardMarkup:
+    """Bepul xizmatlar tugmalari (SeenSMS rasmidagidek)."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✈️ Bepul Telegram Obunachi", callback_data="free_act:tg_sub")],
+        [InlineKeyboardButton(text="✈️ Bepul Telegram Ko'rish", callback_data="free_act:tg_view")],
+        [InlineKeyboardButton(text="✈️ Bepul Telegram Reaksiya", callback_data="free_act:tg_react")],
+        [InlineKeyboardButton(text="📸 Bepul Instagram Ko'rish", callback_data="free_act:ig_view")],
+        [InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")]
+    ])
 
 
 def get_cancel_keyboard() -> ReplyKeyboardMarkup:

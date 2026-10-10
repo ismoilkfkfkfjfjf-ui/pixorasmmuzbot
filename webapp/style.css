@@ -769,3 +769,51 @@ body {
     color: var(--text-muted);
     font-size: 13px;
 }
+
+/* Free Services (SeenSMS Style) */
+.free-services-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+}
+
+.free-buttons-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.free-action-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35);
+    transition: all 0.25s ease;
+}
+
+.free-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    background: linear-gradient(135deg, #4338ca 0%, #2563eb 100%);
+}
+
+.free-action-btn:active {
+    transform: scale(0.98);
+}
+
+.free-action-btn i {
+    font-size: 18px;
+}
