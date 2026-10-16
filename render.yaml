@@ -17,3 +17,5 @@ services:
         value: "1ybZkQeX3znP4a2poz7ZW3VYr6Men8iT"
       - key: WEBAPP_URL
         value: "https://pixorasmmuzbot.onrender.com"
+      - key: RENDER_EXTERNAL_URL
+        value: "https://pixorasmmuzbot.onrender.com"

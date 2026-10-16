@@ -15,6 +15,9 @@ class DepositStates(StatesGroup):
 class DownloaderStates(StatesGroup):
     waiting_for_username = State()
 
+class PromoStates(StatesGroup):
+    waiting_for_promocode = State()
+
 class AdminStates(StatesGroup):
     waiting_for_api_key = State()
     waiting_for_margin = State()
@@ -23,3 +26,8 @@ class AdminStates(StatesGroup):
     waiting_for_balance_amount = State()
     waiting_for_broadcast_msg = State()
     waiting_for_url = State()
+    waiting_for_support_username = State()
+    waiting_for_promo_code = State()
+    waiting_for_promo_reward = State()
+    waiting_for_promo_limit = State()
+    waiting_for_user_search = State()

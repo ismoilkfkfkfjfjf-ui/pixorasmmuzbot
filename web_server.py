@@ -1,12 +1,24 @@
 import os
+import asyncio
 from pathlib import Path
 from aiohttp import web
 from config import BASE_DIR, ASSETS_DIR, WEB_HOST, WEB_PORT
 from database import db
 from seen_api import seen_client, DEFAULT_NUMBER_COUNTRIES
+from notifications import (
+    WEB_MAINTENANCE_MSG,
+    WEB_FREE_MAINTENANCE_MSG,
+    is_balance_or_provider_error,
+    notify_admin_low_balance
+)
 
 async def health_handler(request):
-    return web.json_response({"status": "ok", "service": "Pixora SMM Bot", "running": True})
+    return web.json_response({
+        "status": "ok",
+        "service": "Pixora SMM Bot",
+        "running": True,
+        "version": "2.3-support-admin"
+    })
 
 async def index_handler(request):
     index_file = BASE_DIR / "webapp" / "index.html"
@@ -23,11 +35,14 @@ async def api_user_handler(request):
     user = await db.get_or_create_user(user_id, username, first_name)
     card_number = await db.get_setting("card_number", "8600 0000 0000 0000")
     card_holder = await db.get_setting("card_holder", "Pixora SMM")
+    raw_support = await db.get_setting("support_username", "ismoiluzb022")
+    support_username = str(raw_support).lstrip("@").strip()
 
     return web.json_response({
         **user,
         "card_number": card_number,
-        "card_holder": card_holder
+        "card_holder": card_holder,
+        "support_username": support_username
     })
 
 async def api_services_handler(request):
@@ -77,8 +92,17 @@ async def api_order_handler(request):
             return web.json_response({"error": "Mablag' yetarli emas"}, status=400)
 
         # Send to API
-        api_res = await seen_client.add(service_id, link, quantity)
-        api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+        try:
+            api_res = await seen_client.add(service_id, link, quantity)
+            api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+            if not api_order_id:
+                raise Exception("Buyurtma qabul qilinmadi")
+        except Exception as e:
+            err_str = str(e)
+            if is_balance_or_provider_error(err_str):
+                asyncio.create_task(notify_admin_low_balance(user_id, service["name"]))
+                return web.json_response({"error": WEB_MAINTENANCE_MSG}, status=400)
+            return web.json_response({"error": "Buyurtma yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring."}, status=400)
 
         # Deduct balance
         await db.update_balance(user_id, -total_price)
@@ -125,12 +149,24 @@ async def api_numbers_buy_handler(request):
         if not user or user["balance"] < price:
             return web.json_response({"error": "Mablag' yetarli emas"}, status=400)
 
-        res = await seen_client.numbers_get(country_code, service_code)
+        try:
+            res = await seen_client.numbers_get(country_code, service_code)
+        except Exception as e:
+            err_str = str(e)
+            if is_balance_or_provider_error(err_str):
+                asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})"))
+                return web.json_response({"error": WEB_MAINTENANCE_MSG}, status=400)
+            return web.json_response({"error": "Raqam olishda xatolik. Iltimos, boshqa davlatni tanlang."}, status=400)
+
         phone = res.get("number") or res.get("phone")
         order_id = res.get("id")
 
         if not phone or not order_id:
-            return web.json_response({"error": res.get("error", "Raqam olishda xatolik")}, status=400)
+            err_str = str(res.get("error", ""))
+            if is_balance_or_provider_error(err_str):
+                asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})"))
+                return web.json_response({"error": WEB_MAINTENANCE_MSG}, status=400)
+            return web.json_response({"error": "Hozirda bu servis uchun bo'sh raqam qolmagan. Boshqa davlatni tanlang."}, status=400)
 
         # Deduct balance
         await db.update_balance(user_id, -price)
@@ -220,12 +256,13 @@ async def api_free_order_handler(request):
             api_res = await seen_client.add(cfg["service_id"], link, cfg["quantity"])
             api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
             if not api_order_id:
-                return web.json_response({"error": "SeenSMS buyurtmani qabul qilmadi"}, status=400)
+                raise Exception("Buyurtma qabul qilinmadi")
         except Exception as e:
             err_str = str(e)
-            if "Insufficient balance" in err_str:
-                return web.json_response({"error": "SeenSMS provayderida balans yetarli emas (0 UZS). Admin hisobni to'ldirishi zarur."}, status=400)
-            return web.json_response({"error": f"SeenSMS xatosi: {err_str}"}, status=400)
+            if is_balance_or_provider_error(err_str):
+                asyncio.create_task(notify_admin_low_balance(user_id, f"Bepul: {cfg['name']}"))
+                return web.json_response({"error": WEB_FREE_MAINTENANCE_MSG}, status=400)
+            return web.json_response({"error": "Bepul buyurtma qabul qilinmadi. Iltimos, havola to'g'riligini tekshiring."}, status=400)
 
         await db.record_free_service(user_id, service_type, link)
         order_id = await db.add_order(
@@ -247,6 +284,19 @@ async def api_user_orders_handler(request):
     user_id = int(request.query.get("user_id", 0))
     orders = await db.get_user_orders(user_id, limit=20)
     return web.json_response(orders)
+
+async def api_promocode_activate(request):
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        code = str(data.get("code", "")).strip()
+        if not user_id or not code:
+            return web.json_response({"success": False, "error": "user_id va promokod kiritilishi shart!"}, status=400)
+
+        res = await db.activate_promo_code(user_id, code)
+        return web.json_response(res)
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
 
 
 @web.middleware
@@ -289,6 +339,7 @@ def create_web_app():
     app.router.add_get("/api/user/orders", api_user_orders_handler)
     app.router.add_get("/api/free/services", api_free_services_handler)
     app.router.add_post("/api/free/order", api_free_order_handler)
+    app.router.add_post("/api/promocode/activate", api_promocode_activate)
 
     # Static assets (style.css, app.js, images from webapp/)
     app.router.add_static("/static", path=str(BASE_DIR / "webapp"), name="webapp_static")

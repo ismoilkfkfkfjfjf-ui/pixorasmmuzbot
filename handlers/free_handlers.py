@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -7,6 +8,7 @@ from seen_api import seen_client
 from handlers.keyboards import get_free_services_inline, get_start_inline_keyboard, get_cancel_inline
 from handlers.states import FreeOrderStates
 from handlers.user_handlers import edit_or_reply
+from notifications import MAINTENANCE_FREE_MSG, is_balance_or_provider_error, notify_admin_low_balance
 
 router = Router()
 
@@ -118,18 +120,16 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
         await wait_msg.delete()
         saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
         err_str = str(e)
-        if "Insufficient balance" in err_str:
+        if is_balance_or_provider_error(err_str):
             await message.answer(
-                "⚠️ <b>SeenSMS tizimida mablag' yetarli emas!</b>\n\n"
-                "SeenSMS (seensms.uz) hisobingiz balansi: <b>0 UZS</b>.\n\n"
-                "💡 <i>Bepul xizmatlar foydalanuvchilar uchun bepul qilingan bo'lsa ham, SeenSMS provayderi har bir buyurtma uchun minimal to'lov oladi (masalan, 30 ta reaksiya uchun 15 so'm).</i>\n\n"
-                "Iltimos, bot admini seensms.uz saytida API balansini to'ldirishi zarur.",
+                MAINTENANCE_FREE_MSG,
                 parse_mode="HTML",
                 reply_markup=get_start_inline_keyboard(user_id, saved_url)
             )
+            asyncio.create_task(notify_admin_low_balance(user_id, f"Bepul: {cfg['name']}", bot=message.bot))
         else:
             await message.answer(
-                f"⚠️ SeenSMS xatosi: <code>{err_str}</code>\n\nIltimos, keyinroq qayta urinib ko'ring.",
+                "⚠️ <b>Buyurtma yuborishda xatolik yuz berdi.</b>\nIltimos, havola to'g'riligini tekshirib keyinroq qayta urinib ko'ring.",
                 parse_mode="HTML",
                 reply_markup=get_start_inline_keyboard(user_id, saved_url)
             )

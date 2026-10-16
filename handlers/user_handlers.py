@@ -14,7 +14,7 @@ from handlers.keyboards import (
     get_support_inline,
     get_categories_inline
 )
-from handlers.states import DepositStates, DownloaderStates
+from handlers.states import DepositStates, DownloaderStates, PromoStates
 from downloader import profile_downloader
 
 router = Router()
@@ -389,14 +389,60 @@ async def user_orders_handler(event: types.Message | types.CallbackQuery):
 @router.message(Command("help"))
 @router.callback_query(F.data == "btn_support")
 async def support_handler(event: types.Message | types.CallbackQuery):
-    support_username = await db.get_setting("support_username", "PixoraSupport")
+    support_username = await db.get_setting("support_username", "ismoiluzb022")
+    if not support_username or support_username == "PixoraSupport":
+        support_username = "ismoiluzb022"
+    clean_username = str(support_username).lstrip("@").strip()
+    channel_url = await db.get_setting("channel_url", "https://t.me/pixorasmm")
     text = (
         f"💬 <b>Qo'llab-quvvatlash xizmati:</b>\n\n"
         f"Savollar, takliflar yoki to'lov bo'yicha muammolar yuzaga kelsa, adminga murojaat qiling:\n\n"
-        f"👨‍💻 Aloqa: @{support_username}\n"
-        f"📢 Yangiliklar kanali: https://t.me/pixorasmm"
+        f"👨‍💻 Aloqa: @{clean_username}\n"
+        f"📢 Yangiliklar kanali: {channel_url}"
     )
-    inline_kb = get_support_inline(support_username)
+    inline_kb = get_support_inline(clean_username)
     await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
         await event.answer()
+
+
+# Promo Code Handlers
+@router.message(F.text == "🎟 Promokod")
+@router.message(Command("promo"))
+@router.message(Command("promocode"))
+@router.callback_query(F.data == "btn_promocode")
+async def promo_prompt_handler(event: types.Message | types.CallbackQuery, state: FSMContext):
+    await state.set_state(PromoStates.waiting_for_promocode)
+    text = (
+        "🎟 <b>Promokodni faollashtirish:</b>\n\n"
+        "Balansingizga bepul bonus mablag' olish uchun promokod nomini yuboring:\n"
+        "<i>Masalan: <code>YANGIYIL</code> yoki <code>PIXORA5000</code></i>"
+    )
+    if isinstance(event, types.CallbackQuery):
+        await event.message.answer(text, parse_mode="HTML", reply_markup=get_cancel_inline())
+        await event.answer()
+    else:
+        await event.answer(text, parse_mode="HTML", reply_markup=get_cancel_inline())
+
+
+@router.message(PromoStates.waiting_for_promocode)
+async def promo_code_receive_handler(message: types.Message, state: FSMContext):
+    code = message.text.strip()
+    res = await db.activate_promo_code(message.from_user.id, code)
+    await state.clear()
+    saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+
+    if res.get("success"):
+        reward = int(res["reward"])
+        new_bal = int(res["new_balance"])
+        text = (
+            f"🎉 <b>Tabriklaymiz! Promokod muvaffaqiyatli faollashtirildi!</b>\n\n"
+            f"🎟 Promokod: <code>{res['code']}</code>\n"
+            f"💰 Hisobingizga <b>+{reward:,} so'm</b> qo'shildi!\n"
+            f"💳 Joriy balansingiz: <b>{new_bal:,} so'm</b>\n\n"
+            f"Ushbu mablag'ni SMM xizmatlari yoki Virtual raqamlar xaridi uchun ishlatishingiz mumkin!"
+        ).replace(",", " ")
+    else:
+        text = f"{res.get('error', 'Nomaʼlum xatolik')}"
+
+    await message.answer(text, parse_mode="HTML", reply_markup=get_start_inline_keyboard(message.from_user.id, saved_url))

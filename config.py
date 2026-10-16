@@ -5,7 +5,13 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Telegram Bot Config
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8916949352:AAFdxDRR6704E_Q87kREKMYE1KULHnBmJMk")
-ADMINS = [8422157752]
+admin_env = os.getenv("ADMINS") or os.getenv("ADMIN_ID")
+if admin_env:
+    ADMINS = [int(x.strip()) for x in admin_env.split(",") if x.strip().isdigit()]
+else:
+    ADMINS = [8422157752]
+
+DEFAULT_SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "ismoiluzb022")
 
 # SeenSMS API Config
 SEEN_API_URL = "https://seensms.uz/api/v1"
@@ -22,7 +28,7 @@ WEBAPP_URL = DEFAULT_WEBAPP_URL
 
 # Business defaults
 DEFAULT_MARGIN_PERCENT = 20.0  # 20% margin for admin
-DEFAULT_CARD_NUMBER = "8600 0000 0000 0000"
+DEFAULT_CARD_NUMBER = "6262 7201 2331 5395"
 DEFAULT_CARD_HOLDER = "Pixora SMM"
 DEFAULT_MIN_DEPOSIT = 5000  # UZS
 DEFAULT_REF_BONUS = 500  # 500 UZS per active referral
