@@ -13,7 +13,12 @@ from notifications import (
 )
 
 async def health_handler(request):
-    return web.json_response({"status": "ok", "service": "Pixora SMM Bot", "running": True})
+    return web.json_response({
+        "status": "ok",
+        "service": "Pixora SMM Bot",
+        "running": True,
+        "version": "2.2-webhook"
+    })
 
 async def index_handler(request):
     index_file = BASE_DIR / "webapp" / "index.html"
