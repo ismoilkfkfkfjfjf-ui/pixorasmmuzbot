@@ -1,3 +1,4 @@
+import asyncio
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from config import WEBAPP_URL
@@ -6,6 +7,7 @@ from seen_api import seen_client
 from handlers.keyboards import get_categories_inline, get_services_inline, get_start_inline_keyboard, get_cancel_inline
 from handlers.states import OrderStates
 from handlers.user_handlers import edit_or_reply
+from notifications import MAINTENANCE_SMM_MSG, is_balance_or_provider_error, notify_admin_low_balance
 
 router = Router()
 
@@ -178,8 +180,22 @@ async def execute_smm_order(callback: types.CallbackQuery, state: FSMContext):
     try:
         api_res = await seen_client.add(data["service_id"], data["link"], data["quantity"])
         api_order_id = api_res.get("order") if isinstance(api_res, dict) else None
+        if not api_order_id:
+            raise Exception("Buyurtma qabul qilinmadi")
     except Exception as e:
-        await callback.answer(f"API xatosi: {str(e)}", show_alert=True)
+        err_str = str(e)
+        if is_balance_or_provider_error(err_str):
+            await state.clear()
+            saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+            await callback.message.edit_text(
+                MAINTENANCE_SMM_MSG,
+                parse_mode="HTML",
+                reply_markup=get_start_inline_keyboard(user_id, saved_url)
+            )
+            asyncio.create_task(notify_admin_low_balance(user_id, data["service_name"], bot=callback.bot))
+            await callback.answer()
+            return
+        await callback.answer("⚠️ Buyurtma qabul qilinmadi. Iltimos, keyinroq qayta urinib ko'ring.", show_alert=True)
         return
 
     # Deduct balance

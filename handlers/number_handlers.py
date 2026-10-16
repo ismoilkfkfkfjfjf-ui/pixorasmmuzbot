@@ -3,6 +3,7 @@ from aiogram import Router, F, types
 from database import db
 from seen_api import seen_client, DEFAULT_NUMBER_SERVICES, DEFAULT_NUMBER_COUNTRIES
 from handlers.user_handlers import edit_or_reply
+from notifications import MAINTENANCE_NUMBER_MSG, is_balance_or_provider_error, notify_admin_low_balance
 
 router = Router()
 
@@ -100,7 +101,12 @@ async def number_buy_execute(callback: types.CallbackQuery):
         res = await seen_client.numbers_get(country_id, service_code)
     except Exception as e:
         await wait_msg.delete()
-        await callback.message.answer(f"❌ Xatolik: {str(e)}")
+        err_str = str(e)
+        if is_balance_or_provider_error(err_str):
+            await callback.message.answer(MAINTENANCE_NUMBER_MSG, parse_mode="HTML")
+            asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})", bot=callback.bot))
+        else:
+            await callback.message.answer("⚠️ Hozirda ushbu davlat uchun raqam mavjud emas yoki texnik profilaktika ketmoqda. Iltimos, boshqa davlatni tanlang.")
         await callback.answer()
         return
 
@@ -110,8 +116,12 @@ async def number_buy_execute(callback: types.CallbackQuery):
     order_id = res.get("id")
 
     if not phone or not order_id:
-        err = res.get("error", "Raqam mavjud emas yoki xatolik yuz berdi")
-        await callback.message.answer(f"❌ Xatolik: {err}")
+        err = str(res.get("error", "Raqam mavjud emas yoki xatolik yuz berdi"))
+        if is_balance_or_provider_error(err):
+            await callback.message.answer(MAINTENANCE_NUMBER_MSG, parse_mode="HTML")
+            asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})", bot=callback.bot))
+        else:
+            await callback.message.answer("⚠️ Hozirda ushbu davlat uchun raqam mavjud emas. Iltimos, boshqa davlatni tanlab ko'ring.")
         await callback.answer()
         return
 

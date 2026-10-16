@@ -125,10 +125,22 @@ async def admin_seen_balance_callback(callback: types.CallbackQuery):
         b = await seen_client.balance()
         bal_val = b.get("balance", 0)
         curr_val = b.get("currency", "UZS")
+        status_note = ""
+        if bal_val <= 0:
+            status_note = (
+                "\n\n⚠️ <b>DIQQAT: Hisobingizda mablag' yo'q (0 UZS)!</b>\n"
+                "Foydalanuvchilar buyurtma bermoqchi bo'lganda, ularga "
+                "<i>'🛠 Texnik ta'mirlash ishlari ketmoqda'</i> deb ko'rsatiladi va buyurtma bajarilmaydi.\n\n"
+                "👉 Bot to'laqonli xizmat ko'rsatishi uchun <a href='https://seensms.uz'>seensms.uz</a> "
+                "saytiga kirib, hisobingizni to'ldiring."
+            )
+        else:
+            status_note = "\n🟢 Holati: Ulangan va buyurtmalarni qabul qilishga tayyor!"
+
         text = (
             f"💰 <b>SeenSMS API Balansi:</b>\n\n"
-            f"💵 Balans: <b>{bal_val:,} {curr_val}</b>\n"
-            f"🟢 Holati: Ulangan va faol!"
+            f"💵 Balans: <b>{bal_val:,} {curr_val}</b>"
+            f"{status_note}"
         ).replace(",", " ")
     except Exception as e:
         text = (
@@ -137,7 +149,7 @@ async def admin_seen_balance_callback(callback: types.CallbackQuery):
             "Pastdagi <b>🔑 Seen API Kalit</b> tugmasi orqali API kalitni tekshiring."
         )
 
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_inline())
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_inline(), disable_web_page_preview=True)
     await callback.answer()
 
 @router.callback_query(F.data == "admin_set_api_key")

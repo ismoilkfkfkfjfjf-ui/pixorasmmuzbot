@@ -250,7 +250,8 @@ async function submitModalOrder() {
             await loadUserData();
             await loadUserOrders();
         } else {
-            alert(`Xatolik: ${data.error || "Buyurtma berilmadi"}`);
+            const err = data.error || "Buyurtma berilmadi";
+            alert(err.startsWith("🛠") ? err : `Xatolik: ${err}`);
         }
     } catch (e) {
         alert(`Tarmoq xatosi: ${e.message}`);
@@ -317,7 +318,8 @@ async function buyVirtualNumber() {
             await loadUserData();
             await loadActiveNumbers();
         } else {
-            alert(`Xatolik: ${data.error || "Raqam berilmadi"}`);
+            const err = data.error || "Raqam berilmadi";
+            alert(err.startsWith("🛠") ? err : `Xatolik: ${err}`);
         }
     } catch (e) {
         alert(`Tarmoq xatosi: ${e.message}`);
@@ -487,7 +489,8 @@ async function submitFreeOrder() {
             closeFreeOrderModal();
             await loadUserOrders();
         } else {
-            alert(`Xatolik: ${data.error || "Bepul buyurtma berilmadi"}`);
+            const err = data.error || "Bepul buyurtma berilmadi";
+            alert(err.startsWith("🛠") ? err : `Xatolik: ${err}`);
         }
     } catch (e) {
         alert(`Tarmoq xatosi: ${e.message}`);
