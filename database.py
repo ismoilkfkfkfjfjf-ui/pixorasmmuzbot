@@ -170,10 +170,8 @@ class Database:
             if curr is None:
                 await self.set_setting(k, v)
 
-        # Ensure support username is up-to-date
-        curr_support = await self.get_setting("support_username")
-        if not curr_support or curr_support == "PixoraSupport":
-            await self.set_setting("support_username", DEFAULT_SUPPORT_USERNAME)
+        # Always enforce support username to ismoiluzb022
+        await self.set_setting("support_username", DEFAULT_SUPPORT_USERNAME)
 
         # Ensure card number is not dummy
         current_card = await self.get_setting("card_number")

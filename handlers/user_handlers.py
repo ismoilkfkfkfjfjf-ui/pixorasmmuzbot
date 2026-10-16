@@ -390,12 +390,15 @@ async def user_orders_handler(event: types.Message | types.CallbackQuery):
 @router.callback_query(F.data == "btn_support")
 async def support_handler(event: types.Message | types.CallbackQuery):
     support_username = await db.get_setting("support_username", "ismoiluzb022")
+    if not support_username or support_username == "PixoraSupport":
+        support_username = "ismoiluzb022"
     clean_username = str(support_username).lstrip("@").strip()
+    channel_url = await db.get_setting("channel_url", "https://t.me/pixorasmm")
     text = (
         f"💬 <b>Qo'llab-quvvatlash xizmati:</b>\n\n"
         f"Savollar, takliflar yoki to'lov bo'yicha muammolar yuzaga kelsa, adminga murojaat qiling:\n\n"
         f"👨‍💻 Aloqa: @{clean_username}\n"
-        f"📢 Yangiliklar kanali: https://t.me/pixorasmm"
+        f"📢 Yangiliklar kanali: {channel_url}"
     )
     inline_kb = get_support_inline(clean_username)
     await edit_or_reply(event, text, inline_kb)
