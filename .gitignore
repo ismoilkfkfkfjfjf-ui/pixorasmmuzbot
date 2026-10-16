@@ -20,10 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
-# Database (keep local DB untracked)
-pixora_smm.db
+# Database journal
 pixora_smm.db-journal
-*.sqlite3
+*.sqlite3-journal
 
 # Environment & IDE
 .env

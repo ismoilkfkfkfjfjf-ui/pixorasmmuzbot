@@ -100,13 +100,23 @@ async def main():
 
         setup_application(web_app, dp, bot=bot)
 
-        # Set Telegram webhook
-        await bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=dp.resolve_used_update_types(),
-            drop_pending_updates=False
-        )
-        logger.info(f"✅ Webhook successfully set to: {webhook_url}")
+        # Start Web server first so /webhook and /health are already listening
+        runner = web.AppRunner(web_app)
+        await runner.setup()
+        site = web.TCPSite(runner, WEB_HOST, WEB_PORT)
+        await site.start()
+        logger.info(f"🌐 Web App & Webhook server running at http://{WEB_HOST}:{WEB_PORT}")
+
+        # Set Telegram webhook (server is ready to receive requests)
+        try:
+            await bot.set_webhook(
+                url=webhook_url,
+                allowed_updates=dp.resolve_used_update_types(),
+                drop_pending_updates=False
+            )
+            logger.info(f"✅ Webhook successfully set to: {webhook_url}")
+        except Exception as e:
+            logger.error(f"Failed to set webhook: {e}")
 
         # Start self keep-alive loop
         asyncio.create_task(keep_alive_ping(current_webapp_url))
@@ -121,18 +131,11 @@ async def main():
                     f"🌐 Webhook: <code>{webhook_url}</code>\n"
                     f"📱 Mini App: <code>{current_webapp_url}</code>\n"
                     f"👑 Admin ID: <code>{admin_id}</code>\n\n"
-                    f"⚡ Bot Render platformasida 24/7 uzluksiz rejimda ishlamoqda!",
+                    f"⚡ Bot va Mini App 24/7 uzluksiz ishga tushirildi!",
                     parse_mode="HTML"
                 )
             except Exception as e:
                 logger.warning(f"Could not notify admin {admin_id}: {e}")
-
-        # Start Web server
-        runner = web.AppRunner(web_app)
-        await runner.setup()
-        site = web.TCPSite(runner, WEB_HOST, WEB_PORT)
-        await site.start()
-        logger.info(f"🌐 Web App & Webhook server running at http://{WEB_HOST}:{WEB_PORT}")
 
         # Keep server running indefinitely
         try:
