@@ -118,10 +118,11 @@ def get_orders_inline() -> InlineKeyboardMarkup:
     ])
 
 
-def get_support_inline(support_username: str = "PixoraSupport") -> InlineKeyboardMarkup:
+def get_support_inline(support_username: str = "ismoiluzb022") -> InlineKeyboardMarkup:
+    clean_username = str(support_username).lstrip("@").strip()
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="👨‍💻 Administrator", url=f"https://t.me/{support_username}"),
+            InlineKeyboardButton(text="👨‍💻 Administrator", url=f"https://t.me/{clean_username}"),
             InlineKeyboardButton(text="📢 Rasmiy Kanal", url="https://t.me/pixorasmm")
         ],
         [InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")]
@@ -177,11 +178,14 @@ def get_admin_inline() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="➕/➖ Foydalanuvchi Balansi", callback_data="admin_user_balance")
         ],
         [
-            InlineKeyboardButton(text="🌐 Web App URL sozlash", callback_data="admin_set_url"),
-            InlineKeyboardButton(text="🔄 Xizmatlarni Yangilash", callback_data="admin_sync_services")
+            InlineKeyboardButton(text="💬 Qo'llab-quvvatlash sozlash", callback_data="admin_set_support"),
+            InlineKeyboardButton(text="🌐 Web App URL sozlash", callback_data="admin_set_url")
         ],
         [
-            InlineKeyboardButton(text="✉️ Xabar Tarqatish", callback_data="admin_broadcast"),
+            InlineKeyboardButton(text="🔄 Xizmatlarni Yangilash", callback_data="admin_sync_services"),
+            InlineKeyboardButton(text="✉️ Xabar Tarqatish", callback_data="admin_broadcast")
+        ],
+        [
             InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")
         ]
     ])

@@ -1,6 +1,15 @@
 import aiosqlite
 from datetime import datetime
-from config import DB_PATH, DEFAULT_SEEN_API_KEY, DEFAULT_MARGIN_PERCENT, DEFAULT_CARD_NUMBER, DEFAULT_CARD_HOLDER, DEFAULT_MIN_DEPOSIT, DEFAULT_REF_BONUS
+from config import (
+    DB_PATH,
+    DEFAULT_SEEN_API_KEY,
+    DEFAULT_MARGIN_PERCENT,
+    DEFAULT_CARD_NUMBER,
+    DEFAULT_CARD_HOLDER,
+    DEFAULT_MIN_DEPOSIT,
+    DEFAULT_REF_BONUS,
+    DEFAULT_SUPPORT_USERNAME
+)
 
 class Database:
     def __init__(self, db_path=DB_PATH):
@@ -126,7 +135,7 @@ class Database:
             "card_holder": DEFAULT_CARD_HOLDER,
             "min_deposit": str(DEFAULT_MIN_DEPOSIT),
             "ref_bonus": str(DEFAULT_REF_BONUS),
-            "support_username": "PixoraSupport",
+            "support_username": DEFAULT_SUPPORT_USERNAME,
             "channel_url": "https://t.me/pixorasmm",
             "is_maintenance": "0"
         }
@@ -134,6 +143,11 @@ class Database:
             curr = await self.get_setting(k)
             if curr is None:
                 await self.set_setting(k, v)
+
+        # Ensure support username is up-to-date
+        curr_support = await self.get_setting("support_username")
+        if not curr_support or curr_support == "PixoraSupport":
+            await self.set_setting("support_username", DEFAULT_SUPPORT_USERNAME)
 
         # Ensure card number is not dummy
         current_card = await self.get_setting("card_number")

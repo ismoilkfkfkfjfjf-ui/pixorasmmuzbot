@@ -1,7 +1,7 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from config import ADMINS, WEBAPP_URL
+from config import ADMINS, WEBAPP_URL, DEFAULT_SUPPORT_USERNAME
 from database import db
 from seen_api import seen_client
 from handlers.keyboards import get_admin_inline, get_cancel_inline
@@ -91,6 +91,65 @@ async def admin_save_url_state(message: types.Message, state: FSMContext):
     await message.answer(
         f"✅ <b>Web App havolasi muvaffaqiyatli saqlandi!</b>\n\n"
         f"🌐 URL: <code>{new_url}</code>",
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
+    )
+
+@router.message(Command("setsupport"))
+async def set_support_username_cmd(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        current = await db.get_setting("support_username", DEFAULT_SUPPORT_USERNAME)
+        await message.answer(
+            f"💬 <b>Hozirgi qo'llab-quvvatlash egasi:</b> @{current.lstrip('@')}\n\n"
+            f"O'zgartirish: <code>/setsupport ismoiluzb022</code>",
+            parse_mode="HTML"
+        )
+        return
+    new_support = args[1].strip().lstrip("@")
+    if not new_support:
+        await message.answer("⚠️ Iltimos, to'g'ri username kiriting!", parse_mode="HTML")
+        return
+    await db.set_setting("support_username", new_support)
+    await message.answer(
+        f"✅ <b>Qo'llab-quvvatlash / Admin egasi yangilandi:</b>\n"
+        f"👨‍💻 Aloqa: @{new_support}\n"
+        f"🔗 Havola: https://t.me/{new_support}",
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
+    )
+
+@router.callback_query(F.data == "admin_set_support")
+async def admin_set_support_prompt(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return
+    current = await db.get_setting("support_username", DEFAULT_SUPPORT_USERNAME)
+    await state.set_state(AdminStates.waiting_for_support_username)
+    text = (
+        f"💬 <b>Qo'llab-quvvatlash kontaktini sozlash:</b>\n\n"
+        f"Hozirgi kontakt: <code>@{current.lstrip('@')}</code>\n\n"
+        f"Yangi username'ni yuboring (masalan: <code>@ismoiluzb022</code>) "
+        f"yoki <code>/setsupport ismoiluzb022</code> buyrug'idan foydalaning:"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_cancel_inline())
+    await callback.answer()
+
+@router.message(AdminStates.waiting_for_support_username)
+async def admin_save_support_state(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    new_support = message.text.strip().lstrip("@")
+    if not new_support:
+        await message.answer("⚠️ Iltimos, to'g'ri username kiriting!", reply_markup=get_cancel_inline())
+        return
+    await db.set_setting("support_username", new_support)
+    await state.clear()
+    await message.answer(
+        f"✅ <b>Qo'llab-quvvatlash egasi muvaffaqiyatli saqlandi!</b>\n\n"
+        f"👨‍💻 Aloqa: @{new_support}\n"
+        f"🔗 Havola: https://t.me/{new_support}",
         parse_mode="HTML",
         reply_markup=get_admin_inline()
     )

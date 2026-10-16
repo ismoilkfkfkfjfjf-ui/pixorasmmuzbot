@@ -79,6 +79,13 @@ async function loadUserData() {
             if (data.card_holder) {
                 document.getElementById("depositCardName").textContent = data.card_holder;
             }
+            if (data.support_username) {
+                const sLink = document.getElementById("supportAdminLink");
+                if (sLink) {
+                    sLink.href = `https://t.me/${data.support_username}`;
+                    sLink.textContent = `@${data.support_username}`;
+                }
+            }
         }
     } catch (e) {
         console.error("User data fetch error:", e);

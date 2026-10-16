@@ -23,3 +23,4 @@ class AdminStates(StatesGroup):
     waiting_for_balance_amount = State()
     waiting_for_broadcast_msg = State()
     waiting_for_url = State()
+    waiting_for_support_username = State()

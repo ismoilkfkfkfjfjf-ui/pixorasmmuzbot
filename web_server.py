@@ -17,7 +17,7 @@ async def health_handler(request):
         "status": "ok",
         "service": "Pixora SMM Bot",
         "running": True,
-        "version": "2.2-webhook"
+        "version": "2.3-support-admin"
     })
 
 async def index_handler(request):
@@ -35,11 +35,14 @@ async def api_user_handler(request):
     user = await db.get_or_create_user(user_id, username, first_name)
     card_number = await db.get_setting("card_number", "8600 0000 0000 0000")
     card_holder = await db.get_setting("card_holder", "Pixora SMM")
+    raw_support = await db.get_setting("support_username", "ismoiluzb022")
+    support_username = str(raw_support).lstrip("@").strip()
 
     return web.json_response({
         **user,
         "card_number": card_number,
-        "card_holder": card_holder
+        "card_holder": card_holder,
+        "support_username": support_username
     })
 
 async def api_services_handler(request):
