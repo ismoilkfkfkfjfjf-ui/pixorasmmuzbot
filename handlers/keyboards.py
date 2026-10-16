@@ -6,7 +6,7 @@ def get_start_inline_keyboard(user_id: int, webapp_url: str = None) -> InlineKey
     target_url = webapp_url or WEBAPP_URL
     buttons = [
         [
-            InlineKeyboardButton(text="🎁 Bepul Xizmatlar", callback_data="btn_free"),
+            InlineKeyboardButton(text="🎁 Bepul Xizmatlar", callback_data="free_act:tg_sub"),
             InlineKeyboardButton(text="⚡ SMM Xizmatlari", callback_data="btn_smm")
         ],
         [
@@ -18,12 +18,15 @@ def get_start_inline_keyboard(user_id: int, webapp_url: str = None) -> InlineKey
             InlineKeyboardButton(text="📦 Buyurtmalarim", callback_data="btn_orders")
         ],
         [
-            InlineKeyboardButton(text="📥 Bio & Profil Rasm", callback_data="btn_downloader"),
+            InlineKeyboardButton(text="🎟 Promokod", callback_data="btn_promocode"),
             InlineKeyboardButton(text="🛍️ Xizmatlar Do'koni", callback_data="open_shop")
         ],
         [
-            InlineKeyboardButton(text="📱 Mini App (Do'kon)", web_app=WebAppInfo(url=target_url)),
+            InlineKeyboardButton(text="📥 Bio & Profil Rasm", callback_data="btn_downloader"),
             InlineKeyboardButton(text="💬 Qo'llab-quvvatlash", callback_data="btn_support")
+        ],
+        [
+            InlineKeyboardButton(text="📱 Mini App (Do'kon)", web_app=WebAppInfo(url=target_url))
         ]
     ]
 
@@ -49,10 +52,11 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
             KeyboardButton(text="📦 Buyurtmalarim")
         ],
         [
-            KeyboardButton(text="📥 Bio & Profil Rasm"),
+            KeyboardButton(text="🎟 Promokod"),
             KeyboardButton(text="🛍️ Xizmatlar Do'koni")
         ],
         [
+            KeyboardButton(text="📥 Bio & Profil Rasm"),
             KeyboardButton(text="💬 Qo'llab-quvvatlash")
         ]
     ]
@@ -170,6 +174,10 @@ def get_admin_inline() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="💰 SeenSMS Balansi", callback_data="admin_seen_balance")
         ],
         [
+            InlineKeyboardButton(text="🎟 Promokodlar", callback_data="admin_promos"),
+            InlineKeyboardButton(text="👥 Foydalanuvchilar (Rasmi bilan)", callback_data="admin_user_idx:0")
+        ],
+        [
             InlineKeyboardButton(text="🔑 Seen API Kalit", callback_data="admin_set_api_key"),
             InlineKeyboardButton(text="📈 Ustama Foiz (%)", callback_data="admin_set_margin")
         ],
@@ -189,3 +197,41 @@ def get_admin_inline() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")
         ]
     ])
+
+
+def get_admin_promos_inline(promos: list) -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="➕ Yangi Promokod yaratish", callback_data="admin_add_promo")]
+    ]
+    for p in promos[:15]:
+        p_id = p["id"]
+        code = p["code"]
+        rew = int(p["reward_amount"])
+        uses = p["current_uses"]
+        limit = f"{p['max_uses']} ta" if p["max_uses"] > 0 else "Cheksiz"
+        btn_text = f"🗑 O'chirish: {code} (+{rew:,} | {uses}/{limit})".replace(",", " ")
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"del_promo:{p_id}")])
+
+    buttons.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_user_view_inline(current_idx: int, total_users: int, user_id: int) -> InlineKeyboardMarkup:
+    buttons = []
+    nav_row = []
+    if current_idx > 0:
+        nav_row.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"admin_user_idx:{current_idx - 1}"))
+    nav_row.append(InlineKeyboardButton(text=f"📌 {current_idx + 1} / {total_users}", callback_data="noop"))
+    if current_idx < total_users - 1:
+        nav_row.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"admin_user_idx:{current_idx + 1}"))
+    if nav_row:
+        buttons.append(nav_row)
+
+    buttons.append([
+        InlineKeyboardButton(text="💳 Balansni o'zgartirish", callback_data=f"admin_edit_bal:{user_id}"),
+        InlineKeyboardButton(text="🔍 Qidirish", callback_data="admin_search_user")
+    ])
+    buttons.append([
+        InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

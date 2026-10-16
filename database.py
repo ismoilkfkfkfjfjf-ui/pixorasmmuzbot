@@ -125,6 +125,32 @@ class Database:
                 )
             """)
 
+            # Promo Codes table
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS promo_codes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT UNIQUE NOT NULL,
+                    reward_amount REAL NOT NULL,
+                    max_uses INTEGER DEFAULT 0,
+                    current_uses INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Promo Code Activations table (ensures each user only redeems once)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS promo_code_activations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    promo_code_id INTEGER NOT NULL,
+                    code TEXT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    reward_amount REAL NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(promo_code_id, user_id)
+                )
+            """)
+
             await db.commit()
 
         # Seed initial default settings if missing
@@ -200,6 +226,18 @@ class Database:
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute("SELECT * FROM users ORDER BY id DESC")
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def search_users(self, query: str):
+        clean_q = f"%{str(query).strip().lstrip('@')}%"
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("""
+                SELECT * FROM users 
+                WHERE username LIKE ? OR first_name LIKE ? OR CAST(user_id AS TEXT) LIKE ?
+                ORDER BY id DESC LIMIT 30
+            """, (clean_q, clean_q, clean_q))
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
@@ -426,5 +464,109 @@ class Database:
                 VALUES (?, ?, ?, datetime('now'))
             """, (user_id, service_type, link))
             await db.commit()
+
+    # Promo Code Methods
+    async def create_promo_code(self, code: str, reward_amount: float, max_uses: int = 0) -> int:
+        clean_code = str(code).strip().upper()
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("""
+                INSERT INTO promo_codes (code, reward_amount, max_uses, current_uses, is_active)
+                VALUES (?, ?, ?, 0, 1)
+            """, (clean_code, float(reward_amount), int(max_uses)))
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_all_promo_codes(self) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM promo_codes ORDER BY id DESC")
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_promo_code(self, code: str) -> dict | None:
+        clean_code = str(code).strip().upper()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM promo_codes WHERE UPPER(code) = ?", (clean_code,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def delete_promo_code(self, promo_id: int):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM promo_codes WHERE id = ?", (promo_id,))
+            await db.commit()
+
+    async def activate_promo_code(self, user_id: int, code: str) -> dict:
+        clean_code = str(code).strip().upper()
+        if not clean_code:
+            return {"success": False, "error": "Iltimos, promokodni kiriting!"}
+
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Verify or ensure user exists
+            cursor = await db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+            user = await cursor.fetchone()
+            if not user:
+                await db.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+                await db.commit()
+                cursor = await db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+                user = await cursor.fetchone()
+
+            # Find promo code
+            cursor = await db.execute("SELECT * FROM promo_codes WHERE UPPER(code) = ?", (clean_code,))
+            promo = await cursor.fetchone()
+            if not promo:
+                return {"success": False, "error": f"❌ '{clean_code}' nomli promokod topilmadi!"}
+
+            if not promo["is_active"]:
+                return {"success": False, "error": "⚠️ Ushbu promokod faol emas yoki to'xtatilgan!"}
+
+            # Check usage limit
+            max_uses = promo["max_uses"]
+            curr_uses = promo["current_uses"]
+            if max_uses > 0 and curr_uses >= max_uses:
+                return {"success": False, "error": f"⚠️ Ushbu promokoddan foydalanish limiti ({max_uses} ta) tugagan!"}
+
+            # Check if user already activated this promo
+            cursor = await db.execute(
+                "SELECT id FROM promo_code_activations WHERE promo_code_id = ? AND user_id = ?",
+                (promo["id"], user_id)
+            )
+            already_used = await cursor.fetchone()
+            if already_used:
+                return {"success": False, "error": "⚠️ Siz ushbu promokodni allaqachon faollashtirgansiz!"}
+
+            reward = float(promo["reward_amount"])
+
+            try:
+                await db.execute("""
+                    INSERT INTO promo_code_activations (promo_code_id, code, user_id, reward_amount)
+                    VALUES (?, ?, ?, ?)
+                """, (promo["id"], clean_code, user_id, reward))
+
+                await db.execute("""
+                    UPDATE promo_codes SET current_uses = current_uses + 1 WHERE id = ?
+                """, (promo["id"],))
+
+                await db.execute("""
+                    UPDATE users SET balance = balance + ? WHERE user_id = ?
+                """, (reward, user_id))
+
+                await db.commit()
+            except Exception as e:
+                await db.rollback()
+                return {"success": False, "error": f"Xatolik yuz berdi: {str(e)}"}
+
+            cursor = await db.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+            updated_user = await cursor.fetchone()
+            new_balance = updated_user["balance"] if updated_user else (user["balance"] + reward)
+
+            return {
+                "success": True,
+                "reward": reward,
+                "new_balance": new_balance,
+                "code": clean_code
+            }
 
 db = Database()

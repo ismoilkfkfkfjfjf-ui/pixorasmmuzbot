@@ -506,3 +506,53 @@ async function submitFreeOrder() {
         btn.innerHTML = `<i class="fa-solid fa-gift"></i> Bepul buyurtmani olish`;
     }
 }
+
+// Promo Code Modal
+function openPromoModal() {
+    const input = document.getElementById("promoInput");
+    if (input) input.value = "";
+    document.getElementById("promoModal").classList.add("active");
+}
+
+function closePromoModal() {
+    document.getElementById("promoModal").classList.remove("active");
+}
+
+async function submitPromoCode() {
+    const input = document.getElementById("promoInput");
+    const code = input ? input.value.trim() : "";
+    if (!code) {
+        alert("Iltimos, promokodni kiriting!");
+        return;
+    }
+
+    const btn = document.getElementById("submitPromoBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Tekshirilmoqda...`;
+
+    try {
+        const res = await fetch("/api/promocode/activate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_id: currentUser.id,
+                code: code
+            })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            currentUser.balance = data.new_balance;
+            document.getElementById("userBalance").textContent = `${formatNumber(currentUser.balance)} UZS`;
+            showToast(`🎉 <b>Tabriklaymiz!</b><br>+${formatNumber(data.reward)} UZS hisobingizga qo'shildi!`);
+            closePromoModal();
+        } else {
+            alert(data.error || "Promokodni faollashtirishda xatolik yuz berdi");
+        }
+    } catch (e) {
+        alert(`Tarmoq xatosi: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-gift"></i> Bonusni faollashtirish`;
+    }
+}

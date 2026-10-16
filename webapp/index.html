@@ -36,9 +36,14 @@
                 <div class="balance-badge">
                     <div class="balance-label">Hisobingiz:</div>
                     <div class="balance-amount" id="userBalance">0 UZS</div>
-                    <button class="topup-btn" onclick="openDepositModal()">
-                        <i class="fa-solid fa-plus"></i> To'ldirish
-                    </button>
+                    <div style="display: flex; gap: 6px; margin-top: 4px;">
+                        <button class="topup-btn" onclick="openDepositModal()">
+                            <i class="fa-solid fa-plus"></i> To'ldirish
+                        </button>
+                        <button class="topup-btn" onclick="openPromoModal()" style="background: rgba(255, 255, 255, 0.18);">
+                            <i class="fa-solid fa-ticket"></i> Promokod
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -290,6 +295,28 @@
 
                     <button class="action-btn-primary" id="submitFreeBtn" onclick="submitFreeOrder()">
                         <i class="fa-solid fa-gift"></i> Bepul buyurtmani olish
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Promo Code Modal -->
+        <div id="promoModal" class="modal-backdrop">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-ticket"></i> Promokod faollashtirish</h3>
+                    <button class="close-modal-btn" onclick="closePromoModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+                        Promokod nomini kiriting va hisobingizga bir zumda bepul bonus mablag' oling!
+                    </p>
+                    <div class="form-group">
+                        <label for="promoInput">Promokod kodi:</label>
+                        <input type="text" id="promoInput" placeholder="Masalan: BONUS5000" style="text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">
+                    </div>
+                    <button class="action-btn-primary" id="submitPromoBtn" onclick="submitPromoCode()">
+                        <i class="fa-solid fa-gift"></i> Bonusni faollashtirish
                     </button>
                 </div>
             </div>

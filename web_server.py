@@ -285,6 +285,19 @@ async def api_user_orders_handler(request):
     orders = await db.get_user_orders(user_id, limit=20)
     return web.json_response(orders)
 
+async def api_promocode_activate(request):
+    try:
+        data = await request.json()
+        user_id = int(data.get("user_id", 0))
+        code = str(data.get("code", "")).strip()
+        if not user_id or not code:
+            return web.json_response({"success": False, "error": "user_id va promokod kiritilishi shart!"}, status=400)
+
+        res = await db.activate_promo_code(user_id, code)
+        return web.json_response(res)
+    except Exception as e:
+        return web.json_response({"success": False, "error": str(e)}, status=500)
+
 
 @web.middleware
 async def cors_and_headers_middleware(request, handler):
@@ -326,6 +339,7 @@ def create_web_app():
     app.router.add_get("/api/user/orders", api_user_orders_handler)
     app.router.add_get("/api/free/services", api_free_services_handler)
     app.router.add_post("/api/free/order", api_free_order_handler)
+    app.router.add_post("/api/promocode/activate", api_promocode_activate)
 
     # Static assets (style.css, app.js, images from webapp/)
     app.router.add_static("/static", path=str(BASE_DIR / "webapp"), name="webapp_static")
