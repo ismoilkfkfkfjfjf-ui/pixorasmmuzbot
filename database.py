@@ -135,6 +135,12 @@ class Database:
             if curr is None:
                 await self.set_setting(k, v)
 
+        # Ensure card number is not dummy
+        current_card = await self.get_setting("card_number")
+        if not current_card or "8600 0000" in current_card:
+            await self.set_setting("card_number", DEFAULT_CARD_NUMBER)
+            await self.set_setting("card_holder", DEFAULT_CARD_HOLDER)
+
     # User Methods
     async def get_or_create_user(self, user_id: int, username: str = None, first_name: str = None, referrer_id: int = None):
         async with aiosqlite.connect(self.db_path) as db:
