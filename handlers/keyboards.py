@@ -257,11 +257,15 @@ def get_services_inline(services: list, margin_percent: float, category_key: str
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def get_admin_inline() -> InlineKeyboardMarkup:
+def get_admin_inline(free_enabled: bool = True) -> InlineKeyboardMarkup:
+    free_status_text = "Yoqilgan ✅" if free_enabled else "O'chirilgan ❌"
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats"),
             InlineKeyboardButton(text="💰 SeenSMS Balansi", callback_data="admin_seen_balance")
+        ],
+        [
+            InlineKeyboardButton(text=f"🎁 Bepul xizmatlar: {free_status_text}", callback_data="admin_toggle_free")
         ],
         [
             InlineKeyboardButton(text="🎟 Promokodlar", callback_data="admin_promos"),

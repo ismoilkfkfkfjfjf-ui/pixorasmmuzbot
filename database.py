@@ -163,7 +163,8 @@ class Database:
             "ref_bonus": str(DEFAULT_REF_BONUS),
             "support_username": DEFAULT_SUPPORT_USERNAME,
             "channel_url": "https://t.me/pixorasmm",
-            "is_maintenance": "0"
+            "is_maintenance": "0",
+            "free_services_enabled": "1"
         }
         for k, v in default_settings.items():
             curr = await self.get_setting(k)

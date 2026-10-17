@@ -241,6 +241,10 @@ FREE_SERVICES_MAP = {
 }
 
 async def api_free_services_handler(request):
+    is_enabled = await db.get_setting("free_services_enabled", "1")
+    if is_enabled == "0":
+        return web.json_response([])
+
     user_id = int(request.query.get("user_id", 0))
     result = []
     for k, v in FREE_SERVICES_MAP.items():
@@ -257,6 +261,10 @@ async def api_free_services_handler(request):
 
 async def api_free_order_handler(request):
     try:
+        is_enabled = await db.get_setting("free_services_enabled", "1")
+        if is_enabled == "0":
+            return web.json_response({"error": "Bepul xizmatlar bo'limi vaqtincha to'xtatilgan."}, status=400)
+
         data = await request.json()
         user_id = int(data.get("user_id", 0))
         service_type = data.get("service_type", "")

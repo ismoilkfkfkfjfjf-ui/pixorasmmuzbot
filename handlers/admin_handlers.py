@@ -33,15 +33,37 @@ async def admin_panel_handler(event: types.Message | types.CallbackQuery, state:
         return
 
     current_url = await db.get_setting("webapp_url", WEBAPP_URL)
+    free_enabled = (await db.get_setting("free_services_enabled", "1")) == "1"
     text = (
         "⚙️ <b>Pixora SMM — Boshqaruv Paneli:</b>\n\n"
-        f"🌐 <b>Web App URL:</b> <code>{current_url}</code>\n\n"
+        f"🌐 <b>Web App URL:</b> <code>{current_url}</code>\n"
+        f"🎁 <b>Bepul xizmatlar:</b> {'Faol (Yoqilgan) ✅' if free_enabled else 'To‘xtatilgan (O‘chirilgan) ❌'}\n\n"
         "Kerakli bo'limni tanlang:"
     )
-    inline_kb = get_admin_inline()
+    inline_kb = get_admin_inline(free_enabled=free_enabled)
     await edit_or_reply(event, text, inline_kb)
     if isinstance(event, types.CallbackQuery):
         await event.answer()
+
+@router.callback_query(F.data == "admin_toggle_free")
+async def admin_toggle_free_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+    curr = await db.get_setting("free_services_enabled", "1")
+    new_val = "0" if curr == "1" else "1"
+    await db.set_setting("free_services_enabled", new_val)
+    free_enabled = new_val == "1"
+    status_str = "yoqildi ✅" if free_enabled else "to'xtatildi ❌ (SeenSMS balansi tejaladi)"
+    await callback.answer(f"Bepul xizmatlar {status_str}!", show_alert=True)
+
+    current_url = await db.get_setting("webapp_url", WEBAPP_URL)
+    text = (
+        "⚙️ <b>Pixora SMM — Boshqaruv Paneli:</b>\n\n"
+        f"🌐 <b>Web App URL:</b> <code>{current_url}</code>\n"
+        f"🎁 <b>Bepul xizmatlar:</b> {'Faol (Yoqilgan) ✅' if free_enabled else 'To‘xtatilgan (O‘chirilgan) ❌'}\n\n"
+        "Kerakli bo'limni tanlang:"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_inline(free_enabled=free_enabled))
 
 @router.message(Command("seturl"))
 async def set_webapp_url_cmd(message: types.Message):
