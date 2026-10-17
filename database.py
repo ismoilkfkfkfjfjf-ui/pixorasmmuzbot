@@ -179,6 +179,11 @@ class Database:
             await self.set_setting("card_number", DEFAULT_CARD_NUMBER)
             await self.set_setting("card_holder", DEFAULT_CARD_HOLDER)
 
+        # Ensure dummy services are permanently removed
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM services WHERE service_id IN (101, 102, 103, 104, 201, 202, 203, 204, 301, 402, 403)")
+            await db.commit()
+
     # User Methods
     async def get_or_create_user(self, user_id: int, username: str = None, first_name: str = None, referrer_id: int = None):
         async with aiosqlite.connect(self.db_path) as db:
@@ -345,9 +350,15 @@ class Database:
 
     # Cached Services
     async def sync_services(self, services_list: list):
+        if not services_list:
+            return
         async with aiosqlite.connect(self.db_path) as db:
+            valid_ids = []
             for s in services_list:
                 s_id = int(s.get("service") or s.get("id", 0))
+                if not s_id:
+                    continue
+                valid_ids.append(s_id)
                 name = s.get("name", "")
                 cat = s.get("category", "Boshqa")
                 stype = s.get("type", "Default")
@@ -357,8 +368,8 @@ class Database:
                 desc = s.get("desc", s.get("description", ""))
 
                 await db.execute("""
-                    INSERT INTO services (service_id, name, category, type, rate, min, max, description, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO services (service_id, name, category, type, rate, min, max, description, is_active, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
                     ON CONFLICT(service_id) DO UPDATE SET
                         name=excluded.name,
                         category=excluded.category,
@@ -367,17 +378,27 @@ class Database:
                         min=excluded.min,
                         max=excluded.max,
                         description=excluded.description,
+                        is_active=1,
                         updated_at=CURRENT_TIMESTAMP
                 """, (s_id, name, cat, stype, rate, min_q, max_q, desc))
+
+            # Delete known dummy/fake service IDs permanently
+            await db.execute("DELETE FROM services WHERE service_id IN (101, 102, 103, 104, 201, 202, 203, 204, 301, 402, 403)")
+
+            # Deactivate any services that no longer exist in live SeenSMS
+            if valid_ids:
+                placeholders = ",".join("?" for _ in valid_ids)
+                await db.execute(f"UPDATE services SET is_active = 0 WHERE service_id NOT IN ({placeholders})", valid_ids)
+
             await db.commit()
 
     async def get_services(self, category: str = None):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             if category:
-                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 AND category = ? ORDER BY id ASC", (category,))
+                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 AND category = ? ORDER BY rate ASC", (category,))
             else:
-                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY id ASC")
+                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY rate ASC")
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 

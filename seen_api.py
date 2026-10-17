@@ -54,18 +54,32 @@ class SeenSMSClient:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.post(self.api_url, data=data, headers=headers) as resp:
                     if resp.status == 200:
-                        res = await resp.json()
-                        if isinstance(res, dict) and "error" in res:
-                            logger.warning(f"SeenSMS API error for action '{action}': {res['error']}")
-                            raise SeenSMSError(res["error"], raw_response=res)
+                        try:
+                            res = await resp.json()
+                        except Exception:
+                            text = await resp.text()
+                            logger.error(f"SeenSMS response not JSON on action '{action}': {text[:200]}")
+                            raise SeenSMSError(f"Serverdan noto'g'ri javob qaytdi: {text[:100]}")
+
+                        if isinstance(res, dict):
+                            if "error" in res:
+                                err_msg = str(res["error"])
+                                logger.warning(f"SeenSMS API error for action '{action}': {err_msg}")
+                                raise SeenSMSError(err_msg, raw_response=res)
+                            if res.get("status") == "error":
+                                err_msg = str(res.get("message") or res.get("error") or "Xatolik yuz berdi")
+                                logger.warning(f"SeenSMS API error for action '{action}': {err_msg}")
+                                raise SeenSMSError(err_msg, raw_response=res)
                         return res
                     else:
                         text = await resp.text()
                         logger.error(f"SeenSMS HTTP {resp.status} on action '{action}': {text}")
-                        raise SeenSMSError(f"HTTP Xatosi ({resp.status}): {text}")
+                        raise SeenSMSError(f"SeenSMS HTTP xatosi ({resp.status}): {text[:150]}")
         except asyncio.TimeoutError:
             logger.error(f"SeenSMS request timeout on action '{action}'")
-            raise SeenSMSError("SeenSMS serveriga ulanish vaqti tugadi (Timeout).")
+            raise SeenSMSError("SeenSMS serveriga ulanish vaqti tugadi (Timeout). Iltimos, qayta urinib ko'ring.")
+        except SeenSMSError:
+            raise
         except aiohttp.ClientError as e:
             logger.error(f"SeenSMS connection error on action '{action}': {e}")
             raise SeenSMSError(f"Tarmoq xatosi: {str(e)}")
@@ -182,6 +196,11 @@ class SeenSMSClient:
         except Exception as e:
             logger.warning(f"Could not fetch live services: {e}")
         return await db.get_services()
+
+    # Aliases
+    get_services = services
+    get_numbers_services = numbers_services
+    get_numbers_countries = numbers_countries
 
 DEFAULT_NUMBER_SERVICES = [
     {"service": "tg", "name": "✈️ Telegram"},

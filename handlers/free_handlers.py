@@ -129,7 +129,8 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
             asyncio.create_task(notify_admin_low_balance(user_id, f"Bepul: {cfg['name']}", bot=message.bot))
         else:
             await message.answer(
-                "⚠️ <b>Buyurtma yuborishda xatolik yuz berdi.</b>\nIltimos, havola to'g'riligini tekshirib keyinroq qayta urinib ko'ring.",
+                f"⚠️ <b>Buyurtma yuborishda xatolik yuz berdi:</b>\n<code>{err_str}</code>\n\n"
+                f"Iltimos, havola to'g'riligini tekshirib qayta urinib ko'ring.",
                 parse_mode="HTML",
                 reply_markup=get_start_inline_keyboard(user_id, saved_url)
             )
