@@ -1,22 +1,20 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from config import ADMINS, WEBAPP_URL, DEFAULT_SUPPORT_USERNAME
+from config import ADMINS, WEBAPP_URL, DEFAULT_SUPPORT_USERNAME, is_admin, is_owner
 from database import db
 from seen_api import seen_client
 from handlers.keyboards import (
     get_admin_inline,
     get_cancel_inline,
     get_admin_promos_inline,
-    get_user_view_inline
+    get_user_view_inline,
+    get_admin_management_inline
 )
 from handlers.states import AdminStates
 from handlers.user_handlers import edit_or_reply
 
 router = Router()
-
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMINS
 
 @router.message(F.text == "⚙️ Admin Panel")
 @router.message(Command("admin"))
@@ -63,7 +61,231 @@ async def admin_toggle_free_callback(callback: types.CallbackQuery):
         f"🎁 <b>Bepul xizmatlar:</b> {'Faol (Yoqilgan) ✅' if free_enabled else 'To‘xtatilgan (O‘chirilgan) ❌'}\n\n"
         "Kerakli bo'limni tanlang:"
     )
+    await db.increment_admin_action(callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_admin_inline(free_enabled=free_enabled))
+
+
+# ==========================================
+# ADMINS MANAGEMENT & ACTIVITY RANKING
+# ==========================================
+@router.message(Command("admins"))
+@router.callback_query(F.data == "admin_manage_admins")
+async def admin_manage_admins_handler(event: types.Message | types.CallbackQuery, state: FSMContext = None):
+    if state:
+        await state.clear()
+    user_id = event.from_user.id
+    if not is_admin(user_id):
+        if isinstance(event, types.CallbackQuery):
+            await event.answer("Kechirasiz, siz admin emassiz.", show_alert=True)
+        return
+
+    admins = await db.get_all_admins()
+    admins.sort(key=lambda a: a.get("actions_count", 0), reverse=True)
+
+    text = (
+        "👑 <b>Adminlar Boshqaruvi & Faollik Reytingi:</b>\n\n"
+        "Quyida barcha adminlar va ularning faollik darajasi (bajarilgan amallar soni) keltirilgan:\n\n"
+    )
+
+    medals = ["🥇", "🥈", "🥉"]
+    for i, a in enumerate(admins):
+        rank = medals[i] if i < len(medals) else f"#{i+1}"
+        role_label = "👑 Bosh Admin (Owner)" if a.get("role") == "owner" else "🛡 Admin"
+        name = a.get("first_name") or "Nomaʼlum"
+        uname = f"@{a['username']}" if a.get("username") else f"ID: {a['user_id']}"
+        actions = a.get("actions_count", 0)
+
+        text += (
+            f"{rank} <b>{name}</b> ({uname})\n"
+            f"   ├ Huquqi: <b>{role_label}</b>\n"
+            f"   ├ Telegram ID: <code>{a['user_id']}</code>\n"
+            f"   └ ⚡ Bajarilgan amallar: <b>{actions} ta harakat</b>\n\n"
+        )
+
+    if is_owner(user_id):
+        text += (
+            "💡 <i>Asosiy Egasi (Owner) yangi admin qo'shishi yoki o'chirishi mumkin.</i>\n"
+            "<i>Barcha adminlar botdagi to'liq boshqaruv huquqlariga ega.</i>"
+        )
+    else:
+        text += "ℹ️ <i>Siz admin sifatida botdagi barcha boshqaruv huquqlariga egasiz.</i>"
+
+    keyboard = get_admin_management_inline(admins, viewer_id=user_id)
+    await edit_or_reply(event, text, keyboard)
+    if isinstance(event, types.CallbackQuery):
+        await event.answer()
+
+
+@router.callback_query(F.data == "admin_add_new_admin")
+async def admin_add_new_admin_prompt(callback: types.CallbackQuery, state: FSMContext):
+    if not is_owner(callback.from_user.id):
+        await callback.answer("⚠️ Faqat Asosiy Egasi (Owner) yangi admin qo'sha oladi!", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.waiting_for_new_admin)
+    text = (
+        "➕ <b>Yangi Admin qo'shish:</b>\n\n"
+        "Yangi admin qilmoqchi bo'lgan shaxsning <b>Telegram ID</b> raqamini yoki <b>@username</b>ini yuboring:\n\n"
+        "<i>(Masalan: <code>123456789</code> yoki <code>@username</code>)</i>"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=get_cancel_inline())
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_for_new_admin)
+async def admin_add_new_admin_recv(message: types.Message, state: FSMContext):
+    if not is_owner(message.from_user.id):
+        await state.clear()
+        return
+
+    raw_input = message.text.strip()
+    target_id = None
+    target_uname = None
+    target_first_name = None
+
+    if raw_input.isdigit() or (raw_input.startswith("-") and raw_input[1:].isdigit()):
+        target_id = int(raw_input)
+    elif raw_input.startswith("@"):
+        uname = raw_input.lstrip("@").lower()
+        u = await db.get_user_by_username(uname)
+        if u:
+            target_id = u["user_id"]
+            target_uname = u.get("username")
+            target_first_name = u.get("first_name")
+        else:
+            await message.answer(
+                f"❌ '<b>@{uname}</b>' username'li foydalanuvchi bot bazasidan topilmadi.\n"
+                f"U avval botga kirib /start bosgan bo'lishi kerak yoki uning sonli <b>Telegram ID</b> sini yuboring:",
+                parse_mode="HTML",
+                reply_markup=get_cancel_inline()
+            )
+            return
+    else:
+        await message.answer(
+            "⚠️ Iltimos, Telegram ID raqamini (masalan: <code>123456789</code>) yoki <code>@username</code> yuboring:",
+            parse_mode="HTML",
+            reply_markup=get_cancel_inline()
+        )
+        return
+
+    existing = await db.get_admin(target_id)
+    if existing:
+        await state.clear()
+        await message.answer(
+            f"ℹ️ Ushbu foydalanuvchi (<code>{target_id}</code>) allaqachon adminlar ro'yxatida mavjud!",
+            parse_mode="HTML",
+            reply_markup=get_admin_inline()
+        )
+        return
+
+    if not target_first_name:
+        u = await db.get_user(target_id)
+        if u:
+            target_first_name = u.get("first_name")
+            target_uname = target_uname or u.get("username")
+        else:
+            try:
+                chat = await message.bot.get_chat(target_id)
+                target_first_name = chat.first_name or "Admin"
+                target_uname = chat.username or target_uname
+            except Exception:
+                target_first_name = f"Admin {target_id}"
+
+    await db.add_admin(
+        user_id=target_id,
+        username=target_uname or "",
+        first_name=target_first_name or "",
+        role="admin",
+        added_by=message.from_user.id
+    )
+    await db.increment_admin_action(message.from_user.id)
+    await state.clear()
+
+    try:
+        await message.bot.send_message(
+            target_id,
+            "🎉 <b>Tabriklaymiz! Siz Pixora SMM botiga Admin etib tayinlandingiz!</b>\n\n"
+            "Sizga botning barcha xizmatlari, to'lov arizalari, foydalanuvchilar balansi va boshqaruv paneliga "
+            "to'liq kirish huquqlari berildi.\n\n"
+            "👉 Boshqaruvni ko'rish uchun /admin buyrug'ini yuboring.",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    await message.answer(
+        f"✅ <b>Yangi Admin muvaffaqiyatli qo'shildi!</b>\n\n"
+        f"👤 Ismi: <b>{target_first_name}</b>\n"
+        f"🆔 ID: <code>{target_id}</code>\n"
+        f"🔗 Username: @{target_uname or 'yoʻq'}\n"
+        f"🛡 Huquqlari: <b>To'liq Admin</b>\n\n"
+        f"Barcha adminlar ro'yxati va reytingini ko'rish uchun quyidagi tugmani bosing:",
+        parse_mode="HTML",
+        reply_markup=get_admin_inline()
+    )
+
+
+@router.callback_query(F.data.startswith("admin_del:"))
+async def admin_delete_callback(callback: types.CallbackQuery):
+    if not is_owner(callback.from_user.id):
+        await callback.answer("⚠️ Faqat Asosiy Egasi (Owner) adminni o'chira oladi!", show_alert=True)
+        return
+
+    target_id = int(callback.data.split(":")[1])
+    if is_owner(target_id):
+        await callback.answer("❌ Asosiy Egasini (Owner) o'chirib bo'lmaydi!", show_alert=True)
+        return
+
+    target_admin = await db.get_admin(target_id)
+    success = await db.remove_admin(target_id)
+    if not success:
+        await callback.answer("Adminni o'chirib bo'lmadi yoki topilmadi.", show_alert=True)
+        return
+
+    await db.increment_admin_action(callback.from_user.id)
+
+    try:
+        await callback.bot.send_message(
+            target_id,
+            "ℹ️ <b>Sizning Pixora SMM botidagi adminlik huquqlaringiz to'xtatildi.</b>",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
+    name = target_admin.get("first_name", "") if target_admin else str(target_id)
+    await callback.answer(f"Admin {name} muvaffaqiyatli o'chirildi!", show_alert=True)
+
+    admins = await db.get_all_admins()
+    admins.sort(key=lambda a: a.get("actions_count", 0), reverse=True)
+
+    text = (
+        "👑 <b>Adminlar Boshqaruvi & Faollik Reytingi:</b>\n\n"
+        "Quyida barcha adminlar va ularning faollik darajasi (bajarilgan amallar soni) keltirilgan:\n\n"
+    )
+
+    medals = ["🥇", "🥈", "🥉"]
+    for i, a in enumerate(admins):
+        rank = medals[i] if i < len(medals) else f"#{i+1}"
+        role_label = "👑 Bosh Admin (Owner)" if a.get("role") == "owner" else "🛡 Admin"
+        name_str = a.get("first_name") or "Nomaʼlum"
+        uname = f"@{a['username']}" if a.get("username") else f"ID: {a['user_id']}"
+        actions = a.get("actions_count", 0)
+
+        text += (
+            f"{rank} <b>{name_str}</b> ({uname})\n"
+            f"   ├ Huquqi: <b>{role_label}</b>\n"
+            f"   ├ Telegram ID: <code>{a['user_id']}</code>\n"
+            f"   └ ⚡ Bajarilgan amallar: <b>{actions} ta harakat</b>\n\n"
+        )
+
+    text += (
+        "💡 <i>Asosiy Egasi (Owner) yangi admin qo'shishi yoki o'chirishi mumkin.</i>\n"
+        "<i>Barcha adminlar botdagi to'liq boshqaruv huquqlariga ega.</i>"
+    )
+
+    keyboard = get_admin_management_inline(admins, viewer_id=callback.from_user.id)
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 @router.message(Command("seturl"))
 async def set_webapp_url_cmd(message: types.Message):
@@ -83,6 +305,7 @@ async def set_webapp_url_cmd(message: types.Message):
         await message.answer("⚠️ Havola faqat <b>https://</b> bilan boshlanishi kerak!", parse_mode="HTML")
         return
     await db.set_setting("webapp_url", new_url)
+    await db.increment_admin_action(message.from_user.id)
     await message.answer(
         f"✅ <b>Web App URL yangilandi:</b>\n<code>{new_url}</code>\n\n"
         f"Barcha Mini App tugmalari shu yangi havolaga o'tdi!",
@@ -114,6 +337,7 @@ async def admin_save_url_state(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Havola faqat <b>https://</b> bilan boshlanishi kerak!", reply_markup=get_cancel_inline())
         return
     await db.set_setting("webapp_url", new_url)
+    await db.increment_admin_action(message.from_user.id)
     await state.clear()
     await message.answer(
         f"✅ <b>Web App havolasi muvaffaqiyatli saqlandi!</b>\n\n"
@@ -140,6 +364,7 @@ async def set_support_username_cmd(message: types.Message):
         await message.answer("⚠️ Iltimos, to'g'ri username kiriting!", parse_mode="HTML")
         return
     await db.set_setting("support_username", new_support)
+    await db.increment_admin_action(message.from_user.id)
     await message.answer(
         f"✅ <b>Qo'llab-quvvatlash / Admin egasi yangilandi:</b>\n"
         f"👨‍💻 Aloqa: @{new_support}\n"
@@ -172,6 +397,7 @@ async def admin_save_support_state(message: types.Message, state: FSMContext):
         await message.answer("⚠️ Iltimos, to'g'ri username kiriting!", reply_markup=get_cancel_inline())
         return
     await db.set_setting("support_username", new_support)
+    await db.increment_admin_action(message.from_user.id)
     await state.clear()
     await message.answer(
         f"✅ <b>Qo'llab-quvvatlash egasi muvaffaqiyatli saqlandi!</b>\n\n"
@@ -261,6 +487,7 @@ async def admin_save_api_key(message: types.Message, state: FSMContext):
 
     new_key = message.text.strip()
     await db.set_setting("seen_api_key", new_key)
+    await db.increment_admin_action(message.from_user.id)
     await state.clear()
 
     # Test key
@@ -303,6 +530,7 @@ async def admin_save_margin(message: types.Message, state: FSMContext):
     try:
         new_margin = float(message.text.replace("%", "").strip())
         await db.set_setting("margin_percent", str(new_margin))
+        await db.increment_admin_action(message.from_user.id)
         await state.clear()
         await message.answer(
             f"✅ Ustama foizi <b>{new_margin}%</b> qilib belgilandi!",
@@ -347,6 +575,7 @@ async def admin_save_card(message: types.Message, state: FSMContext):
 
     await db.set_setting("card_number", card_num)
     await db.set_setting("card_holder", holder)
+    await db.increment_admin_action(message.from_user.id)
     await state.clear()
 
     await message.answer(
@@ -407,6 +636,7 @@ async def admin_balance_amount_recv(message: types.Message, state: FSMContext):
         target_id = data["target_id"]
 
         await db.update_balance(target_id, amount)
+        await db.increment_admin_action(message.from_user.id)
         user = await db.get_user(target_id)
 
         # Notify user
@@ -439,6 +669,7 @@ async def admin_sync_services_callback(callback: types.CallbackQuery):
 
     wait_msg = await callback.message.answer("🔄 Xizmatlar yangilanmoqda...")
     srvs = await seen_client.fetch_services()
+    await db.increment_admin_action(callback.from_user.id)
     await wait_msg.delete()
 
     await callback.message.answer(
@@ -481,6 +712,7 @@ async def admin_broadcast_exec(message: types.Message, state: FSMContext):
         except Exception:
             fail_count += 1
 
+    await db.increment_admin_action(message.from_user.id)
     await status_msg.edit_text(
         f"🎉 <b>Xabar tarqatish yakunlandi!</b>\n\n"
         f"✅ Yuborildi: <b>{sent_count} ta</b>\n"
@@ -507,6 +739,7 @@ async def deposit_approve_callback(callback: types.CallbackQuery):
 
     await db.update_deposit_status(dep_id, "approved")
     await db.update_balance(user_id, amount)
+    await db.increment_admin_action(callback.from_user.id)
 
     user = await db.get_user(user_id)
     new_bal = user["balance"] if user else amount
@@ -545,6 +778,7 @@ async def deposit_reject_callback(callback: types.CallbackQuery):
 
     user_id = dep["user_id"]
     await db.update_deposit_status(dep_id, "rejected")
+    await db.increment_admin_action(callback.from_user.id)
 
     # Notify user
     try:
@@ -631,6 +865,7 @@ async def admin_newpromo_cmd(message: types.Message):
 
     try:
         await db.create_promo_code(code, reward, limit)
+        await db.increment_admin_action(message.from_user.id)
         limit_desc = f"{limit} ta" if limit > 0 else "Cheksiz"
         await message.answer(
             f"✅ <b>Promokod muvaffaqiyatli yaratildi!</b>\n\n"
@@ -707,6 +942,7 @@ async def admin_promo_limit_received(message: types.Message, state: FSMContext):
         reward = data["promo_reward"]
 
         await db.create_promo_code(code, reward, limit)
+        await db.increment_admin_action(message.from_user.id)
         await state.clear()
 
         limit_desc = f"{limit} ta" if limit > 0 else "Cheksiz"
@@ -732,6 +968,7 @@ async def admin_delete_promo_callback(callback: types.CallbackQuery):
 
     promo_id = int(callback.data.split(":")[1])
     await db.delete_promo_code(promo_id)
+    await db.increment_admin_action(callback.from_user.id)
     await callback.answer("Promokod o'chirildi!", show_alert=True)
 
     # Refresh promo list

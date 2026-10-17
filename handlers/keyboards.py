@@ -1,5 +1,5 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
-from config import ADMINS, WEBAPP_URL
+from config import ADMINS, WEBAPP_URL, is_admin, is_owner
 
 def get_start_inline_keyboard(user_id: int, webapp_url: str = None) -> InlineKeyboardMarkup:
     """Xabar tagidagi asosiy Inline menyu tugmalari."""
@@ -30,7 +30,7 @@ def get_start_inline_keyboard(user_id: int, webapp_url: str = None) -> InlineKey
         ]
     ]
 
-    if user_id in ADMINS:
+    if is_admin(user_id):
         buttons.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -61,7 +61,7 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         ]
     ]
 
-    if user_id in ADMINS:
+    if is_admin(user_id):
         buttons.append([KeyboardButton(text="⚙️ Admin Panel")])
 
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
@@ -268,6 +268,9 @@ def get_admin_inline(free_enabled: bool = True) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=f"🎁 Bepul xizmatlar: {free_status_text}", callback_data="admin_toggle_free")
         ],
         [
+            InlineKeyboardButton(text="👑 Adminlar Boshqaruvi & Faollik", callback_data="admin_manage_admins")
+        ],
+        [
             InlineKeyboardButton(text="🎟 Promokodlar", callback_data="admin_promos"),
             InlineKeyboardButton(text="👥 Foydalanuvchilar (Rasmi bilan)", callback_data="admin_user_idx:0")
         ],
@@ -293,6 +296,30 @@ def get_admin_inline(free_enabled: bool = True) -> InlineKeyboardMarkup:
     ])
 
 
+def get_admin_management_inline(admins: list, viewer_id: int) -> InlineKeyboardMarkup:
+    buttons = []
+    if is_owner(viewer_id):
+        buttons.append([
+            InlineKeyboardButton(text="➕ Yangi Admin qo'shish", callback_data="admin_add_new_admin")
+        ])
+        for a in admins:
+            if a.get("role") != "owner" and a.get("user_id") != viewer_id:
+                name = a.get("first_name") or f"Admin {a.get('user_id')}"
+                if len(name) > 18:
+                    name = name[:16] + ".."
+                buttons.append([
+                    InlineKeyboardButton(
+                        text=f"🗑 O'chirish: {name} ({a['user_id']})",
+                        callback_data=f"admin_del:{a['user_id']}"
+                    )
+                ])
+
+    buttons.append([
+        InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_admin_promos_inline(promos: list) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="➕ Yangi Promokod yaratish", callback_data="admin_add_promo")]
@@ -306,7 +333,7 @@ def get_admin_promos_inline(promos: list) -> InlineKeyboardMarkup:
         btn_text = f"🗑 O'chirish: {code} (+{rew:,} | {uses}/{limit})".replace(",", " ")
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"del_promo:{p_id}")])
 
-    buttons.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")])
+    buttons.append([InlineKeyboardButton(text="⚙️ Admin Panel", callback_data="btn_admin")] )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

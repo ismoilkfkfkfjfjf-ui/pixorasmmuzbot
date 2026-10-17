@@ -31,3 +31,4 @@ class AdminStates(StatesGroup):
     waiting_for_promo_reward = State()
     waiting_for_promo_limit = State()
     waiting_for_user_search = State()
+    waiting_for_new_admin = State()
