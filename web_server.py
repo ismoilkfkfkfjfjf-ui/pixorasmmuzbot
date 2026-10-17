@@ -102,7 +102,7 @@ async def api_order_handler(request):
             if is_balance_or_provider_error(err_str):
                 asyncio.create_task(notify_admin_low_balance(user_id, service["name"]))
                 return web.json_response({"error": WEB_MAINTENANCE_MSG}, status=400)
-            return web.json_response({"error": "Buyurtma yuborishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko'ring."}, status=400)
+            return web.json_response({"error": f"Buyurtma xatosi: {err_str}"}, status=400)
 
         # Deduct balance
         await db.update_balance(user_id, -total_price)
@@ -129,20 +129,41 @@ async def api_order_handler(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def api_numbers_services_handler(request):
-    services = await seen_client.numbers_services()
-    return web.json_response(services)
+    from seen_api import DEFAULT_NUMBER_SERVICES
+    return web.json_response(DEFAULT_NUMBER_SERVICES)
 
 async def api_numbers_countries_handler(request):
     service_code = request.query.get("service", "tg")
-    countries = await seen_client.numbers_countries(service_code)
-    return web.json_response(countries)
+    try:
+        countries = await seen_client.numbers_countries(service_code)
+    except Exception:
+        countries = DEFAULT_NUMBER_COUNTRIES
+
+    margin = float(await db.get_setting("margin_percent", "20.0"))
+    available = [c for c in countries if int(c.get("count", 0)) > 0]
+    if not available:
+        available = countries[:20]
+
+    available.sort(key=lambda x: (-int(x.get("count", 0)), float(x.get("price", 99999))))
+
+    result = []
+    for c in available[:30]:
+        base_price = float(c.get("price", 8500))
+        final_price = round(base_price * (1 + margin / 100))
+        result.append({
+            "country": str(c.get("country") or c.get("id")),
+            "name": c.get("name", "Davlat"),
+            "price": final_price,
+            "count": int(c.get("count", 0))
+        })
+    return web.json_response(result)
 
 async def api_numbers_buy_handler(request):
     try:
         data = await request.json()
         user_id = int(data.get("user_id", 0))
         service_code = data.get("service", "tg")
-        country_code = int(data.get("country", 1))
+        country_code = str(data.get("country", 1))
         price = float(data.get("price", 8500))
 
         user = await db.get_user(user_id)
@@ -156,7 +177,7 @@ async def api_numbers_buy_handler(request):
             if is_balance_or_provider_error(err_str):
                 asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})"))
                 return web.json_response({"error": WEB_MAINTENANCE_MSG}, status=400)
-            return web.json_response({"error": "Raqam olishda xatolik. Iltimos, boshqa davlatni tanlang."}, status=400)
+            return web.json_response({"error": f"Raqam olishda xatolik: {err_str}"}, status=400)
 
         phone = res.get("number") or res.get("phone")
         order_id = res.get("id")
@@ -220,6 +241,10 @@ FREE_SERVICES_MAP = {
 }
 
 async def api_free_services_handler(request):
+    is_enabled = await db.get_setting("free_services_enabled", "1")
+    if is_enabled == "0":
+        return web.json_response([])
+
     user_id = int(request.query.get("user_id", 0))
     result = []
     for k, v in FREE_SERVICES_MAP.items():
@@ -236,6 +261,10 @@ async def api_free_services_handler(request):
 
 async def api_free_order_handler(request):
     try:
+        is_enabled = await db.get_setting("free_services_enabled", "1")
+        if is_enabled == "0":
+            return web.json_response({"error": "Bepul xizmatlar bo'limi vaqtincha to'xtatilgan."}, status=400)
+
         data = await request.json()
         user_id = int(data.get("user_id", 0))
         service_type = data.get("service_type", "")
@@ -262,7 +291,7 @@ async def api_free_order_handler(request):
             if is_balance_or_provider_error(err_str):
                 asyncio.create_task(notify_admin_low_balance(user_id, f"Bepul: {cfg['name']}"))
                 return web.json_response({"error": WEB_FREE_MAINTENANCE_MSG}, status=400)
-            return web.json_response({"error": "Bepul buyurtma qabul qilinmadi. Iltimos, havola to'g'riligini tekshiring."}, status=400)
+            return web.json_response({"error": f"Bepul buyurtma qabul qilinmadi: {err_str}"}, status=400)
 
         await db.record_free_service(user_id, service_type, link)
         order_id = await db.add_order(

@@ -8,7 +8,9 @@ from config import (
     DEFAULT_CARD_HOLDER,
     DEFAULT_MIN_DEPOSIT,
     DEFAULT_REF_BONUS,
-    DEFAULT_SUPPORT_USERNAME
+    DEFAULT_SUPPORT_USERNAME,
+    ADMINS,
+    ADMIN_IDS
 )
 
 class Database:
@@ -151,6 +153,20 @@ class Database:
                 )
             """)
 
+            # Admins table (tracks roles and activity)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS admins (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id BIGINT UNIQUE NOT NULL,
+                    username TEXT,
+                    first_name TEXT,
+                    role TEXT DEFAULT 'admin',
+                    added_by BIGINT,
+                    actions_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             await db.commit()
 
         # Seed initial default settings if missing
@@ -163,7 +179,8 @@ class Database:
             "ref_bonus": str(DEFAULT_REF_BONUS),
             "support_username": DEFAULT_SUPPORT_USERNAME,
             "channel_url": "https://t.me/pixorasmm",
-            "is_maintenance": "0"
+            "is_maintenance": "0",
+            "free_services_enabled": "1"
         }
         for k, v in default_settings.items():
             curr = await self.get_setting(k)
@@ -178,6 +195,26 @@ class Database:
         if not current_card or "8600 0000" in current_card:
             await self.set_setting("card_number", DEFAULT_CARD_NUMBER)
             await self.set_setting("card_holder", DEFAULT_CARD_HOLDER)
+
+        # Ensure dummy services are permanently removed
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("DELETE FROM services WHERE service_id IN (101, 102, 103, 104, 201, 202, 203, 204, 301, 402, 403)")
+            await db.commit()
+
+        # Seed default owners into admins table and load into ADMIN_IDS cache
+        async with aiosqlite.connect(self.db_path) as db:
+            for a_id in ADMINS:
+                await db.execute("""
+                    INSERT INTO admins (user_id, username, first_name, role)
+                    VALUES (?, 'ismoiluzb022', 'Bosh Admin', 'owner')
+                    ON CONFLICT(user_id) DO UPDATE SET role = 'owner'
+                """, (a_id,))
+            await db.commit()
+
+            cursor = await db.execute("SELECT user_id FROM admins")
+            rows = await cursor.fetchall()
+            for r in rows:
+                ADMIN_IDS.add(r[0])
 
     # User Methods
     async def get_or_create_user(self, user_id: int, username: str = None, first_name: str = None, referrer_id: int = None):
@@ -226,6 +263,14 @@ class Database:
             cursor = await db.execute("SELECT * FROM users ORDER BY id DESC")
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
+
+    async def get_user_by_username(self, username: str):
+        clean_u = username.strip().lstrip('@').lower()
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM users WHERE LOWER(username) = ?", (clean_u,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
 
     async def search_users(self, query: str):
         clean_q = f"%{str(query).strip().lstrip('@')}%"
@@ -345,9 +390,15 @@ class Database:
 
     # Cached Services
     async def sync_services(self, services_list: list):
+        if not services_list:
+            return
         async with aiosqlite.connect(self.db_path) as db:
+            valid_ids = []
             for s in services_list:
                 s_id = int(s.get("service") or s.get("id", 0))
+                if not s_id:
+                    continue
+                valid_ids.append(s_id)
                 name = s.get("name", "")
                 cat = s.get("category", "Boshqa")
                 stype = s.get("type", "Default")
@@ -357,8 +408,8 @@ class Database:
                 desc = s.get("desc", s.get("description", ""))
 
                 await db.execute("""
-                    INSERT INTO services (service_id, name, category, type, rate, min, max, description, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO services (service_id, name, category, type, rate, min, max, description, is_active, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
                     ON CONFLICT(service_id) DO UPDATE SET
                         name=excluded.name,
                         category=excluded.category,
@@ -367,17 +418,27 @@ class Database:
                         min=excluded.min,
                         max=excluded.max,
                         description=excluded.description,
+                        is_active=1,
                         updated_at=CURRENT_TIMESTAMP
                 """, (s_id, name, cat, stype, rate, min_q, max_q, desc))
+
+            # Delete known dummy/fake service IDs permanently
+            await db.execute("DELETE FROM services WHERE service_id IN (101, 102, 103, 104, 201, 202, 203, 204, 301, 402, 403)")
+
+            # Deactivate any services that no longer exist in live SeenSMS
+            if valid_ids:
+                placeholders = ",".join("?" for _ in valid_ids)
+                await db.execute(f"UPDATE services SET is_active = 0 WHERE service_id NOT IN ({placeholders})", valid_ids)
+
             await db.commit()
 
     async def get_services(self, category: str = None):
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             if category:
-                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 AND category = ? ORDER BY id ASC", (category,))
+                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 AND category = ? ORDER BY rate ASC", (category,))
             else:
-                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY id ASC")
+                cursor = await db.execute("SELECT * FROM services WHERE is_active = 1 ORDER BY rate ASC")
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
@@ -566,5 +627,50 @@ class Database:
                 "new_balance": new_balance,
                 "code": clean_code
             }
+
+    # Admin Management Methods
+    async def get_all_admins(self) -> list[dict]:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM admins ORDER BY actions_count DESC, id ASC")
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_admin(self, user_id: int) -> dict | None:
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute("SELECT * FROM admins WHERE user_id = ?", (user_id,))
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def add_admin(self, user_id: int, username: str = None, first_name: str = None, role: str = 'admin', added_by: int = None) -> bool:
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO admins (user_id, username, first_name, role, added_by, actions_count)
+                VALUES (?, ?, ?, ?, ?, 0)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username=coalesce(excluded.username, admins.username),
+                    first_name=coalesce(excluded.first_name, admins.first_name),
+                    role=excluded.role
+            """, (user_id, username, first_name, role, added_by))
+            await db.commit()
+        ADMIN_IDS.add(user_id)
+        return True
+
+    async def remove_admin(self, user_id: int) -> bool:
+        if user_id in ADMINS:
+            return False
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute("DELETE FROM admins WHERE user_id = ? AND role != 'owner'", (user_id,))
+            await db.commit()
+            removed = cursor.rowcount > 0
+        if removed:
+            ADMIN_IDS.discard(user_id)
+        return removed
+
+    async def increment_admin_action(self, user_id: int):
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("UPDATE admins SET actions_count = actions_count + 1 WHERE user_id = ?", (user_id,))
+            await db.commit()
 
 db = Database()

@@ -11,6 +11,14 @@ if admin_env:
 else:
     ADMINS = [8422157752]
 
+ADMIN_IDS = set(ADMINS)
+
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS or user_id in ADMINS
+
+def is_owner(user_id: int) -> bool:
+    return user_id in ADMINS or user_id == 8422157752
+
 DEFAULT_SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "ismoiluzb022")
 
 # SeenSMS API Config

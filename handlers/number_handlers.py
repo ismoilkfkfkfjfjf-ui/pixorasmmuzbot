@@ -10,14 +10,11 @@ router = Router()
 @router.message(F.text == "📲 Virtual Raqamlar")
 @router.callback_query(F.data == "btn_numbers")
 async def numbers_menu_handler(event: types.Message | types.CallbackQuery):
-    services = await seen_client.get_numbers_services()
     keyboard = []
-    for s in services[:6]:
-        code = s.get("code") or s.get("id")
+    for s in DEFAULT_NUMBER_SERVICES:
+        code = s.get("service") or s.get("code")
         name = s.get("name")
-        price = s.get("price", 8500)
-        btn_text = f"{name} — {price:,} so'm".replace(",", " ")
-        keyboard.append([types.InlineKeyboardButton(text=btn_text, callback_data=f"num_srv:{code}")])
+        keyboard.append([types.InlineKeyboardButton(text=name, callback_data=f"num_srv:{code}")])
 
     keyboard.append([types.InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")])
 
@@ -33,30 +30,50 @@ async def numbers_menu_handler(event: types.Message | types.CallbackQuery):
 @router.callback_query(F.data.startswith("num_srv:"))
 async def number_service_chosen(callback: types.CallbackQuery):
     service_code = callback.data.split(":")[1]
-    countries = await seen_client.get_numbers_countries(service_code)
+    wait_msg = await callback.message.answer("⏳ Davlatlar va narxlar yuklanmoqda...")
+
+    try:
+        countries = await seen_client.numbers_countries(service_code)
+    except Exception as e:
+        countries = DEFAULT_NUMBER_COUNTRIES
+
+    await wait_msg.delete()
+
+    margin = float(await db.get_setting("margin_percent", "20.0"))
+
+    # Filter countries with available stock > 0
+    available_countries = [c for c in countries if int(c.get("count", 0)) > 0]
+    if not available_countries:
+        available_countries = countries[:8]
+
+    # Sort by available count descending and price
+    available_countries.sort(key=lambda x: (-int(x.get("count", 0)), float(x.get("price", 99999))))
 
     keyboard = []
-    for c in countries[:6]:
-        cid = c.get("country") or c.get("id")
-        name = c.get("name")
-        price = c.get("price", 8500)
-        btn_text = f"{name} — {price:,} so'm".replace(",", " ")
-        keyboard.append([types.InlineKeyboardButton(text=btn_text, callback_data=f"num_buy:{service_code}:{cid}:{price}")])
+    for c in available_countries[:8]:
+        cid = str(c.get("country") or c.get("id"))
+        name = c.get("name", "Davlat")
+        base_price = float(c.get("price", 8500))
+        final_price = round(base_price * (1 + margin / 100))
+        count = int(c.get("count", 0))
+        count_str = f" ({count:,} ta)" if count > 0 else ""
+        btn_text = f"{name}{count_str} — {final_price:,} so'm".replace(",", " ")
+        keyboard.append([types.InlineKeyboardButton(text=btn_text, callback_data=f"num_buy:{service_code}:{cid}:{final_price}")])
 
     keyboard.append([
         types.InlineKeyboardButton(text="⬅️ Boshqa servislar", callback_data="back_num_services"),
         types.InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")
     ])
 
-    await callback.message.edit_text(
-        f"<b>{service_code.upper()} uchun davlatni tanlang:</b>",
-        parse_mode="HTML",
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
-    await callback.answer()
+    service_name = service_code.upper()
+    for s in DEFAULT_NUMBER_SERVICES:
+        if s.get("service") == service_code:
+            service_name = s.get("name")
+            break
 
     await callback.message.edit_text(
-        f"<b>{service_code.upper()} uchun davlatni tanlang:</b>",
+        f"<b>{service_name} uchun davlatni tanlang:</b>\n\n"
+        f"Quyida eng ko'p zaxiraga ega va arzon davlatlar ko'rsatilgan:",
         parse_mode="HTML",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
@@ -64,14 +81,13 @@ async def number_service_chosen(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "back_num_services")
 async def back_num_services(callback: types.CallbackQuery):
-    services = await seen_client.get_numbers_services()
     keyboard = []
-    for s in services[:6]:
-        code = s.get("code") or s.get("id")
+    for s in DEFAULT_NUMBER_SERVICES:
+        code = s.get("service") or s.get("code")
         name = s.get("name")
-        price = s.get("price", 8500)
-        btn_text = f"{name} — {price:,} so'm".replace(",", " ")
-        keyboard.append([types.InlineKeyboardButton(text=btn_text, callback_data=f"num_srv:{code}")])
+        keyboard.append([types.InlineKeyboardButton(text=name, callback_data=f"num_srv:{code}")])
+
+    keyboard.append([types.InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="btn_home")])
 
     await callback.message.edit_text(
         "📲 <b>Virtual Raqamlar:</b>\nPlatformani tanlang:",
@@ -84,7 +100,7 @@ async def back_num_services(callback: types.CallbackQuery):
 async def number_buy_execute(callback: types.CallbackQuery):
     parts = callback.data.split(":")
     service_code = parts[1]
-    country_id = int(parts[2])
+    country_id = parts[2]
     price = float(parts[3])
 
     user_id = callback.from_user.id
@@ -106,7 +122,7 @@ async def number_buy_execute(callback: types.CallbackQuery):
             await callback.message.answer(MAINTENANCE_NUMBER_MSG, parse_mode="HTML")
             asyncio.create_task(notify_admin_low_balance(user_id, f"Virtual Raqam ({service_code.upper()})", bot=callback.bot))
         else:
-            await callback.message.answer("⚠️ Hozirda ushbu davlat uchun raqam mavjud emas yoki texnik profilaktika ketmoqda. Iltimos, boshqa davlatni tanlang.")
+            await callback.message.answer(f"⚠️ Raqam olishda xatolik: {err_str}\nIltimos, boshqa davlatni tanlab ko'ring.")
         await callback.answer()
         return
 

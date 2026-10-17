@@ -48,6 +48,19 @@ FREE_SERVICES_CONFIG = {
 @router.callback_query(F.data == "btn_free")
 async def free_services_menu(event: types.Message | types.CallbackQuery, state: FSMContext):
     await state.clear()
+    is_enabled = await db.get_setting("free_services_enabled", "1")
+    if is_enabled == "0":
+        text = (
+            "🎁 <b>SeenSMS Bepul xizmatlar bo'limi:</b>\n\n"
+            "⚠️ Hozirda bepul xizmatlar bo'limi vaqtincha to'xtatilgan yoki profilaktika qilinmoqda.\n\n"
+            "Iltimos, birozdan so'ng qayta urinib ko'ring yoki asosiy menyudagi arzon SMM xizmatlaridan foydalaning!"
+        )
+        saved_url = await db.get_setting("webapp_url", WEBAPP_URL)
+        await edit_or_reply(event, text, get_start_inline_keyboard(event.from_user.id, saved_url))
+        if isinstance(event, types.CallbackQuery):
+            await event.answer()
+        return
+
     text = (
         "🎁 <b>SeenSMS Bepul xizmatlar bo'limi:</b>\n\n"
         "Har bir foydalanuvchi har 24 soatda o'z kanali yoki sahifasini "
@@ -61,6 +74,11 @@ async def free_services_menu(event: types.Message | types.CallbackQuery, state: 
 
 @router.callback_query(F.data.startswith("free_act:"))
 async def free_service_chosen(callback: types.CallbackQuery, state: FSMContext):
+    is_enabled = await db.get_setting("free_services_enabled", "1")
+    if is_enabled == "0":
+        await callback.answer("⚠️ Bepul xizmatlar bo'limi vaqtincha to'xtatilgan!", show_alert=True)
+        return
+
     service_type = callback.data.split(":")[1]
     cfg = FREE_SERVICES_CONFIG.get(service_type)
     if not cfg:
@@ -129,7 +147,8 @@ async def free_order_link_received(message: types.Message, state: FSMContext):
             asyncio.create_task(notify_admin_low_balance(user_id, f"Bepul: {cfg['name']}", bot=message.bot))
         else:
             await message.answer(
-                "⚠️ <b>Buyurtma yuborishda xatolik yuz berdi.</b>\nIltimos, havola to'g'riligini tekshirib keyinroq qayta urinib ko'ring.",
+                f"⚠️ <b>Buyurtma yuborishda xatolik yuz berdi:</b>\n<code>{err_str}</code>\n\n"
+                f"Iltimos, havola to'g'riligini tekshirib qayta urinib ko'ring.",
                 parse_mode="HTML",
                 reply_markup=get_start_inline_keyboard(user_id, saved_url)
             )
